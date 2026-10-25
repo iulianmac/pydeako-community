@@ -2,8 +2,8 @@
 
 import json
 from uuid import uuid4
+from unittest.mock import ANY, Mock, patch
 import pytest
-from mock import ANY, Mock, patch
 
 from ._deako import Deako, FindDevicesError
 
