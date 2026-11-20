@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Problem with the Home Assistant Deako integration
+    url: https://github.com/home-assistant/core/issues
+    about: Report integration issues (setup, entities, UI) to Home Assistant Core. Use a blank issue here for bugs in the pydeako library itself.
