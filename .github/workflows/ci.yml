@@ -31,6 +31,7 @@ jobs:
       - run: pip install -r requirements.txt -r requirements_test.txt
       - run: pylint pydeako
       - run: pycodestyle pydeako
+      - run: mypy pydeako
       - run: pytest pydeako
 
   build:
