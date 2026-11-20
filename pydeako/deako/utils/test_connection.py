@@ -31,7 +31,7 @@ def test_init(init_run_mock, socket_connection_mock, asyncio_mock):
     init_run_mock.assert_called_once()
 
 
-@pytest.mark.parametrize("raise_error,", [True, False])
+@pytest.mark.parametrize("raise_error", [True, False])
 @patch("pydeako.deako.utils._connection.asyncio")
 @patch(
     "pydeako.deako.utils._connection._SocketConnection",
