@@ -4,9 +4,11 @@
 
 `pydeako` is a Python library for discovering, connecting to, and interacting with Deako smart devices on the local network.
 
+This is the community-maintained continuation of [DeakoLights/pydeako](https://github.com/DeakoLights/pydeako), published on PyPI as `pydeako-community`. The import name is still `pydeako`.
+
 ## Installation
 
-`pip install pydeako`
+`pip install pydeako-community`
 
 ## Usage
 
@@ -57,7 +59,7 @@ if __name__ == "__main__":
 
 ### Dev environment setup
 
-1. Use Python 3.11+
+1. Use Python 3.11–3.14
 2. `python -m venv venv`
 3. `source venv/bin/activate`
 4. `pip install -r requirements.txt`
@@ -75,4 +77,8 @@ MIT License, see LICENSE.txt
 
 ## Project status
 
-Actively maintained by Deako.
+Deako published and maintained `pydeako` until release 0.6.0 (December 2024). The repository has had no activity since then. Its only contributor [no longer maintains anything related to Deako](https://github.com/DeakoLights/pydeako/pull/5#issuecomment-6393009318) and [suggested continuing it as a fork](https://github.com/DeakoLights/pydeako/pull/5#issuecomment-6402937827). Deako didn't answer a request to software@deako.com about maintainership.
+
+This fork keeps the full history of the original project. Release 0.6.1 contains the same library code as `pydeako` 0.6.0, repackaged and published from GitHub Actions. Fixes land in later releases.
+
+Bugs in the Home Assistant Deako integration go to [Home Assistant Core](https://github.com/home-assistant/core/issues); bugs in this library go [here](https://github.com/pydeako-community/pydeako/issues).
