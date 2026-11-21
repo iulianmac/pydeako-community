@@ -67,6 +67,7 @@ disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
 
 [tool.ruff]
 line-length = 79

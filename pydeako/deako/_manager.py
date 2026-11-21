@@ -103,6 +103,7 @@ class _Manager:
             self.create_connection_task()
             return
         connection = _Connection(address, name, self.incoming_json)
+        connection.start()
         timeout = 0
         try:
             while (

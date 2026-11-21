@@ -61,7 +61,7 @@ class _Connection:
         name: str,
         on_data_callback: Callable[[dict[str, Any]], None],
     ) -> None:
-        """Set up and start a socket connection."""
+        """Set up a socket connection; start() connects and reads."""
         self.address = address
         self.name = name
         self.loop = asyncio.get_running_loop()
@@ -73,7 +73,6 @@ class _Connection:
         self.skipping_line = False
         self.socket = _SocketConnection(address, self.loop)
         self.tasks = set()
-        self.init_run()
 
     async def send_data(self, data_to_send: str) -> None:
         """Send data to socket."""
@@ -161,8 +160,8 @@ class _Connection:
             buffer = "" if self.skipping_line else rest
         self.message_buffer = buffer
 
-    def init_run(self) -> None:
-        """Init the run sequence and store run task."""
+    def start(self) -> None:
+        """Start the task that connects and reads messages."""
         # Keep a reference so the task isn't garbage collected while running.
         task = self.loop.create_task(self.run())
 

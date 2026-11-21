@@ -97,7 +97,10 @@ async def test_init_connection_timeout_connecting(
     create_connection_mock.assert_called_once()  # this is the retry
 
 
-@patch("pydeako.deako._manager._Manager.maintain_connection_worker")
+@patch(
+    "pydeako.deako._manager._Manager.maintain_connection_worker",
+    new_callable=Mock,
+)
 @patch("pydeako.deako._manager._Connection")
 @patch("pydeako.deako._manager.asyncio", autospec=True)
 @pytest.mark.asyncio

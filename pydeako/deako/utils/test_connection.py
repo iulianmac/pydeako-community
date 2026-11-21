@@ -15,8 +15,7 @@ from ._socket import _SocketConnection
     "pydeako.deako.utils._connection._SocketConnection",
     spec=_SocketConnection,
 )
-@patch("pydeako.deako.utils._connection._Connection.init_run")
-def test_init(init_run_mock, socket_connection_mock, asyncio_mock):
+def test_init(socket_connection_mock, asyncio_mock):
     """Test _Connection.__init__."""
     address, name = Mock(), Mock()
     loop_mock = AsyncMock()
@@ -29,7 +28,9 @@ def test_init(init_run_mock, socket_connection_mock, asyncio_mock):
     assert conn is not None
     asyncio_mock.get_running_loop.assert_called_once()
     assert conn.state == ConnectionState.NOT_STARTED
-    init_run_mock.assert_called_once()
+    # nothing runs until start()
+    loop_mock.create_task.assert_not_called()
+    assert not conn.tasks
 
 
 @pytest.mark.parametrize("raise_error", [True, False])
@@ -290,8 +291,8 @@ def test_parse_data_drops_oversized_message():
     "pydeako.deako.utils._connection._SocketConnection",
     spec=_SocketConnection,
 )
-@patch("pydeako.deako.utils._connection._Connection.run")
-def test_init_run(run_mock, socket_connection_mock, asyncio_mock):
+@patch("pydeako.deako.utils._connection._Connection.run", new_callable=Mock)
+def test_start(run_mock, socket_connection_mock, asyncio_mock):
     """Test _Connection.__init__."""
     address, name = Mock(), Mock()
     loop_mock = Mock()
@@ -301,10 +302,12 @@ def test_init_run(run_mock, socket_connection_mock, asyncio_mock):
     loop_mock.create_task.return_value = task_mock
 
     conn = _Connection(address, name, Mock())
+    conn.start()
 
     socket_connection_mock.assert_called_once_with(address, loop_mock)
 
     run_mock.assert_called_once()
+    loop_mock.create_task.assert_called_once_with(run_mock.return_value)
     task_mock.add_done_callback.assert_called_once()
     assert task_mock in conn.tasks
 
