@@ -61,10 +61,9 @@ class Deako:
             return
 
         self.devices[uuid]["state"]["power"] = power
-        # dimmables don't always send dim
-        self.devices[uuid]["state"]["dim"] = (
-            dim or self.devices[uuid]["state"]["dim"]
-        )
+        # dimmables don't always send dim; 0 is a valid level
+        if dim is not None:
+            self.devices[uuid]["state"]["dim"] = dim
 
         if "callback" in self.devices[uuid]:
             self.devices[uuid]["callback"]()

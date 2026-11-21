@@ -467,3 +467,23 @@ async def test_get_dimmable(device_exists, dimmable):
         assert is_dimmable == dimmable
     else:
         assert is_dimmable is None
+
+
+def test_update_state_dim_zero():
+    """Test a dim of 0 is stored, not mistaken for 'no dim'."""
+    deako = Deako(Mock())
+    deako.record_device("Lamp", "uuid", True, True, 40)
+
+    deako.update_state("uuid", True, 0)
+
+    assert deako.get_state("uuid") == {"power": True, "dim": 0}
+
+
+def test_update_state_without_dim_keeps_dim():
+    """Test an event without dim keeps the last known dim."""
+    deako = Deako(Mock())
+    deako.record_device("Lamp", "uuid", True, True, 40)
+
+    deako.update_state("uuid", False)
+
+    assert deako.get_state("uuid") == {"power": False, "dim": 40}
