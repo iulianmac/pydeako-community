@@ -33,6 +33,16 @@ CAPABILITY_DIMMABLE = "dim"
 # Upper bound on devices accepted from one bridge.
 MAX_DEVICES = 1000
 MAX_DIM = 100
+# Longest value from the bridge that goes into a log message.
+MAX_LOGGED_CHARS = 80
+
+
+def _short(value: object) -> str:
+    """Return a one-line repr of value, cut to MAX_LOGGED_CHARS."""
+    text = repr(value)
+    if len(text) <= MAX_LOGGED_CHARS:
+        return text
+    return text[:MAX_LOGGED_CHARS] + "..."
 
 
 def _is_int(value: object) -> TypeGuard[int]:
@@ -119,13 +129,17 @@ class Deako:
             elif in_data["type"] == ResponseType.EVENT:
                 self._handle_event(in_data["data"])
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            _LOGGER.error("Failed to parse %s: %s", in_data, exc)
+            _LOGGER.error(
+                "Failed to parse a %s message: %s",
+                _short(in_data.get("type")),
+                _short(exc),
+            )
 
     def _handle_device_list(self, data: dict[str, Any]) -> None:
         """Store how many devices the bridge is about to report."""
         count = data.get("number_of_devices")
         if not _is_int(count) or not 0 <= count <= MAX_DEVICES:
-            _LOGGER.error("Ignoring invalid device count %r", count)
+            _LOGGER.error("Ignoring invalid device count %s", _short(count))
             return
         self.expected_devices = count
 
@@ -141,11 +155,14 @@ class Deako:
             or not isinstance(capabilities, (str, list, type(None)))
             or state is None
         ):
-            _LOGGER.error("Ignoring invalid device %r", uuid)
+            _LOGGER.error("Ignoring invalid device %s", _short(uuid))
             return
         if uuid not in self.devices and len(self.devices) >= MAX_DEVICES:
-            _LOGGER.error("Ignoring device %s: over %d devices", uuid,
-                          MAX_DEVICES)
+            _LOGGER.error(
+                "Ignoring device %s: over %d devices",
+                _short(uuid),
+                MAX_DEVICES,
+            )
             return
         power, dim = state
         if capabilities is not None:
@@ -160,7 +177,9 @@ class Deako:
         target = data.get("target")
         state = _parse_state(data.get("state"))
         if not isinstance(target, str) or state is None:
-            _LOGGER.error("Ignoring invalid state change for %r", target)
+            _LOGGER.error(
+                "Ignoring invalid state change for %s", _short(target),
+            )
             return
         self.update_state(target, *state)
 

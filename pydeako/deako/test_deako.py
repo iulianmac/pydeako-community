@@ -609,3 +609,30 @@ def test_incoming_json_event_lenient_values(state, expected):
     )
 
     assert deako.get_state("u") == expected
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # handler raises: data isn't an object
+        {"type": "EVENT", "data": None, "junk": "x" * 10_000},
+        # invalid device with a huge, multi-line uuid
+        {"type": "DEVICE_FOUND",
+         "data": {"name": 1, "uuid": "u\r\n" * 5_000,
+                  "state": {"power": True}}},
+        # invalid event target
+        {"type": "EVENT",
+         "data": {"target": ["t"] * 5_000, "state": {"power": "on"}}},
+    ],
+)
+def test_incoming_json_logs_are_bounded(message, caplog):
+    """Test logging an invalid message stays short and on one line."""
+    deako = Deako(Mock())
+
+    deako.incoming_json(message)
+
+    assert caplog.records
+    for record in caplog.records:
+        text = record.getMessage()
+        assert len(text) < 300
+        assert "\n" not in text and "\r" not in text
