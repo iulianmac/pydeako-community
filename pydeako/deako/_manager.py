@@ -1,7 +1,8 @@
 """
-Manager to SocketConnection, ensuring that there's always an
-active connection. Uses two workers, one to check connectivity
-through pinging, and one to check for messages to send.
+Manage the connection to a Deako device and keep it alive.
+
+A worker pings the device and reconnects when no answer comes back.
+Requests are sent one at a time.
 """
 
 import asyncio
@@ -241,9 +242,11 @@ class _Manager:
 
     async def send_request(self, req: _Request) -> bool:
         """
-        Send a request. Requests go out one at a time: the next one is sent
-        once the device answers (or RESPONSE_TIMEOUT_S passes). Requests
-        answered with DEVICE_BUSY are retried.
+        Send a request and wait for the device to answer it.
+
+        Requests go out one at a time: the next one is sent once the device
+        answers (or RESPONSE_TIMEOUT_S passes). Requests answered with
+        DEVICE_BUSY are retried.
         """
         async with self.send_lock:
             for attempt in range(MAX_BUSY_RETRIES + 1):

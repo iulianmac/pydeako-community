@@ -1,12 +1,10 @@
-"""
-Address pool that is used for DeakoDiscoverer.
-"""
+"""Address pool that is used for DeakoDiscoverer."""
 import threading
 from collections import OrderedDict
 
 
 class EmptyAddressPoolError(Exception):
-    """Empty address pool"""
+    """Empty address pool."""
 
 
 class _AddressPool:
@@ -47,9 +45,7 @@ class _AddressPool:
             return address, name
 
     def remove_address(self, address: str) -> None:
-        """
-        Remove an address from the pool.
-        """
+        """Remove an address from the pool."""
         with self._lock:
             self.addresses.pop(address, None)
 

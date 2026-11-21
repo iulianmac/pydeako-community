@@ -1,6 +1,4 @@
-"""
-Test the discovery client, patching the address pool and zeroconf lib.
-"""
+"""Test the discovery client, patching the address pool and zeroconf lib."""
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
@@ -17,7 +15,7 @@ from ._discover import DeakoDiscoverer, DeakoListener, DevicesNotFoundError
 def test_deako_discoverer_init(
     mock_address_pool, mock_deako_listener, mock_service_browser_init
 ):
-    """Test init of Discoverer.__init__"""
+    """Test init of Discoverer.__init__."""
     zc_mock = Mock(Zeroconf)
 
     deako_discoverer = DeakoDiscoverer(zc_mock)
@@ -44,8 +42,7 @@ def test_deako_discoverer_init(
 def test_deako_discoverer_init_no_zc(
     mock_address_pool, mock_deako_listener, mock_service_browser_init, mock_zc
 ):
-    """Test init of Discoverer.__init__ with no zc passed in"""
-
+    """Test init of Discoverer.__init__ with no zc passed in."""
     deako_discoverer = DeakoDiscoverer()
 
     assert deako_discoverer is not None
@@ -99,10 +96,7 @@ async def test_deako_discoverer_get_address_success(
 async def test_deako_discoverer_get_address_timeout(
     mock_address_pool, mock_deako_listener, mock_service_browser_init
 ):  # pylint: disable=unused-argument
-    """
-    Test Discoverer.get_address times out and
-    throws DevicesNotFoundError.
-    """
+    """Test Discoverer.get_address times out with DevicesNotFoundError."""
     # use instance as the mock as this is what will be called
     mock_address_pool = mock_address_pool.return_value
     zc_mock = Mock(Zeroconf)

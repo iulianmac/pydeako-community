@@ -1,5 +1,7 @@
 """
-pydeako module provides the following:
+Control Deako smart lights over the local network.
+
+The package provides:
  - models to interact with Deako devices locally with a socket connection
  - implementation of a Deako socket client
  - mdns discovery client

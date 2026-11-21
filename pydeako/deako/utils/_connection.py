@@ -1,6 +1,4 @@
-"""
-Class that manages a socket connection to a deako device.
-"""
+"""Class that manages a socket connection to a deako device."""
 
 import asyncio
 import codecs
@@ -42,8 +40,9 @@ class ConnectionState(Enum):
 
 class _Connection:
     """
-    Representation of a local socket connection to a Deako device.
-    Continuously reads socket for messages async.
+    Local socket connection to a Deako device.
+
+    A task keeps reading the socket and hands each message to a callback.
     """
 
     # pylint: disable=too-many-instance-attributes
@@ -62,7 +61,7 @@ class _Connection:
         name: str,
         on_data_callback: Callable[[dict[str, Any]], None],
     ) -> None:
-        """Setup and start a socket connection."""
+        """Set up and start a socket connection."""
         self.address = address
         self.name = name
         self.loop = asyncio.get_running_loop()

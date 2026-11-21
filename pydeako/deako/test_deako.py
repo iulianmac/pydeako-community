@@ -1,4 +1,4 @@
-"""Test Deako"""
+"""Test Deako."""
 
 import json
 from typing import Any
@@ -58,10 +58,7 @@ def test_update_state_no_callback():
 
 
 def test_update_state_no_callback_no_dim():
-    """
-    Test Deako.update_state with no callback,
-    no dim for a device that has dim.
-    """
+    """Test Deako.update_state, no callback, no dim for a dimmable."""
     device_id = str(uuid4())
 
     deako = Deako(Mock())
@@ -431,7 +428,7 @@ async def test_get_name(device_exists):
 @pytest.mark.parametrize("device_exists", [True, False])
 @pytest.mark.asyncio
 async def test_get_state(device_exists):
-    """Test Deako.get_state"""
+    """Test Deako.get_state."""
     device_id = str(uuid4())
     device_state = Mock()
     deako = Deako(Mock())
@@ -453,7 +450,7 @@ async def test_get_state(device_exists):
 @pytest.mark.parametrize("device_exists", [True, False])
 @pytest.mark.asyncio
 async def test_get_dimmable(device_exists, dimmable):
-    """Test Deako.get_state"""
+    """Test Deako.get_state."""
     device_id = str(uuid4())
     deako = Deako(Mock())
 

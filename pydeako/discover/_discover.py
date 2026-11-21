@@ -1,6 +1,4 @@
-"""
-Deako device discovery via zeroconf.
-"""
+"""Deako device discovery via zeroconf."""
 
 import logging
 import socket
@@ -56,7 +54,8 @@ class DeakoDiscoverer(ServiceBrowser):
     async def get_address(self) -> tuple[str, str]:
         """
         Get an address from the pool of available addresses.
-        Times out after TIMEOUT_S.
+
+        Waits up to TIMEOUT_S for a device to be discovered.
         """
         total_time = 0.0
         while (
@@ -128,8 +127,9 @@ class DeakoListener(ServiceListener):
         self, zeroconf: Zeroconf, address_type: str, name: str
     ) -> list[str]:
         """
-        Get the service info for a specified address type and name.
-        Convert to local ips with port.
+        Get a service's addresses.
+
+        Returns each IPv4 address as host:port.
         """
         info = zeroconf.get_service_info(address_type, name)
         if info is not None:

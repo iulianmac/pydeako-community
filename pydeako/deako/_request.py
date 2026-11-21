@@ -7,10 +7,7 @@ from uuid import uuid4
 
 
 class _Request:
-    """
-    Request to send to local integrations with
-    optional callback after successful send.
-    """
+    """Request to send to local integrations."""
 
     body: dict[str, Any]
     completed_callback: Callable[[], None] | None = None

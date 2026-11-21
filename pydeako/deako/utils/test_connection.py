@@ -17,7 +17,7 @@ from ._socket import _SocketConnection
 )
 @patch("pydeako.deako.utils._connection._Connection.init_run")
 def test_init(init_run_mock, socket_connection_mock, asyncio_mock):
-    """Test _Connection.__init__"""
+    """Test _Connection.__init__."""
     address, name = Mock(), Mock()
     loop_mock = AsyncMock()
     asyncio_mock.get_running_loop.return_value = loop_mock
@@ -292,7 +292,7 @@ def test_parse_data_drops_oversized_message():
 )
 @patch("pydeako.deako.utils._connection._Connection.run")
 def test_init_run(run_mock, socket_connection_mock, asyncio_mock):
-    """Test _Connection.__init__"""
+    """Test _Connection.__init__."""
     address, name = Mock(), Mock()
     loop_mock = Mock()
     task_mock = Mock()

@@ -1,6 +1,4 @@
-"""
-Test the address pool used by discoverer.
-"""
+"""Test the address pool used by discoverer."""
 
 from uuid import uuid4
 

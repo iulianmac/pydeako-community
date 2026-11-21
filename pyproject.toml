@@ -80,6 +80,7 @@ select = [
     "B",      # flake8-bugbear
     "BLE",    # flake8-blind-except
     "C4",     # flake8-comprehensions
+    "D",      # pydocstyle (PEP 257)
     "E",      # pycodestyle errors
     "F",      # pyflakes
     "G",      # flake8-logging-format
@@ -96,6 +97,9 @@ select = [
     "UP",     # pyupgrade
     "W",      # pycodestyle warnings
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use literal values and take mock arguments they don't read.

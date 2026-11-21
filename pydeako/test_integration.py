@@ -28,6 +28,7 @@ class FakeDeakoConnect:
     # pylint: disable=too-many-instance-attributes
 
     def __init__(self, devices: dict[str, dict[str, Any]]) -> None:
+        """Set up the bridge with its devices; call start() to listen."""
         self.devices = devices
         self.received: list[dict[str, Any]] = []
         self.raw_received = bytearray()
@@ -192,7 +193,7 @@ def _fast_polling(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest_asyncio.fixture(name="bridge")
 async def fixture_bridge() -> AsyncIterator[FakeDeakoConnect]:
-    """A running fake bridge with three devices."""
+    """Start a fake bridge with three devices."""
     fake = FakeDeakoConnect(_devices())
     await fake.start()
     yield fake
@@ -203,7 +204,7 @@ async def fixture_bridge() -> AsyncIterator[FakeDeakoConnect]:
 async def fixture_client(
     bridge: FakeDeakoConnect,
 ) -> AsyncIterator[Deako]:
-    """A Deako client connected to the fake bridge, devices found."""
+    """Connect a Deako client to the fake bridge and find its devices."""
     deako = Deako(bridge.get_address, client_name="tests")
     await deako.connect()
     await deako.find_devices()

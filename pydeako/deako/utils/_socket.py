@@ -1,6 +1,4 @@
-"""
-Socket wrapper for connecting to an address, reading, and sending bytes.
-"""
+"""Socket wrapper for connecting to an address, reading, and sending bytes."""
 
 import asyncio
 import logging
@@ -11,7 +9,7 @@ _MAX_PACKET_SIZE_BYTES = 2048
 
 
 class NoSocketError(Exception):
-    """No socket to perform ops exception"""
+    """No socket to perform ops exception."""
 
 
 class _SocketConnection:

@@ -1,6 +1,4 @@
-"""
-Tests our functions to ensure the correct objects are generated.
-"""
+"""Tests our functions to ensure the correct objects are generated."""
 from typing import Any
 from uuid import uuid4
 
