@@ -587,3 +587,25 @@ async def test_background_connect_error_retries(connection_mock, worker_mock):
     assert manager.connection is connection_mock.return_value
     worker_mock.assert_called_once()
     manager.close()
+
+
+@patch("pydeako.deako._manager._Manager.maintain_connection_worker")
+@patch("pydeako.deako._manager._Manager.create_connection_task")
+@patch("pydeako.deako._manager._Connection")
+@patch("pydeako.deako._manager.asyncio.sleep", new_callable=AsyncMock)
+@pytest.mark.asyncio
+async def test_init_connection_connected_at_deadline(
+    _sleep_mock, connection_mock, create_connection_mock, _worker_mock,
+):
+    """Test a connection made in the last polling interval is kept."""
+    polls = CONNECTION_TIMEOUT_S  # still connecting after every interval
+    connection_mock.return_value.is_connected.side_effect = (
+        [False] * polls + [True] * 5
+    )
+    manager = _Manager(AsyncMock(return_value=("1.2.3.4:23", "dev")), Mock())
+
+    await manager.init_connection()
+
+    connection_mock.return_value.close.assert_not_called()
+    create_connection_mock.assert_not_called()
+    assert manager.connection is connection_mock.return_value

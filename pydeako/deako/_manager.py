@@ -117,7 +117,7 @@ class _Manager:
             # e.g. cancelled by close(): don't leave the socket open
             connection.close()
             raise
-        if timeout == CONNECTION_TIMEOUT_S:
+        if not connection.is_connected():
             _LOGGER.error("Timeout attempting to connect. Trying again")
             connection.close()
             self.create_connection_task()
