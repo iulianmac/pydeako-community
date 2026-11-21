@@ -2,7 +2,7 @@
 
 import json
 from typing import Any
-from unittest.mock import ANY, Mock, patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -400,7 +400,7 @@ async def test_control_device(manager_mock):
     await deako.control_device(device_id, power, dim)
 
     manager_mock.return_value.send_state_change.assert_called_once_with(
-        device_id, power, dim, completed_callback=ANY
+        device_id, power, dim,
     )
 
 

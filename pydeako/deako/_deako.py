@@ -256,16 +256,14 @@ class Deako:
             )
 
     async def control_device(
-        self, uuid: str, power: bool, dim: int | None = None
+        self, uuid: str, power: bool, dim: int | None = None,
     ) -> None:
-        """Add control request to queue."""
+        """
+        Ask the device to change its state.
 
-        def completed_callback() -> None:
-            self.update_state(uuid, power, dim)
-
-        await self.connection_manager.send_state_change(
-            uuid, power, dim, completed_callback=completed_callback
-        )
+        The new state arrives later as an EVENT from the bridge.
+        """
+        await self.connection_manager.send_state_change(uuid, power, dim)
 
     def get_name(self, uuid: str) -> str | None:
         """Get a device's name by uuid."""

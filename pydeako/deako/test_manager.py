@@ -132,18 +132,15 @@ async def test_init_connection(
 
 def test_close():
     """Test _Manager.close."""
-    worker = Mock()
     maintain_worker = Mock()
     connection = Mock()
 
     manager = _Manager(AsyncMock(), Mock())
-    manager.worker = worker
     manager.maintain_worker = maintain_worker
     manager.connection = connection
 
     manager.close()
 
-    worker.cancel.assert_called_once()
     maintain_worker.cancel.assert_called_once()
     connection.close.assert_called_once()
 
@@ -259,14 +256,12 @@ async def test_send_get_device_list(device_list_request_mock, request_mock):
     assert result is False
 
 
-@pytest.mark.parametrize("completed_callback", [None, "some_callback"])
 @patch("pydeako.deako._manager._Request")
 @patch("pydeako.deako._manager.state_change_request")
 @patch("pydeako.deako._manager._Manager.send_request")
 @pytest.mark.asyncio
 async def test_send_state_change(
     send_request_mock, state_change_request_mock, request_mock,
-    completed_callback,
 ):
     """Test _Manager.send_state_change."""
     client_name = Mock()
@@ -279,13 +274,10 @@ async def test_send_state_change(
 
     manager = _Manager(AsyncMock(), Mock(), client_name=client_name)
 
-    await manager.send_state_change(
-        uuid, power, dim, completed_callback=completed_callback
-    )
+    await manager.send_state_change(uuid, power, dim)
 
     request_mock.assert_called_once_with(
         state_change_request_mock.return_value,
-        completed_callback=completed_callback,
     )
     state_change_request_mock.assert_called_once_with(
         uuid, power, dim, source=client_name

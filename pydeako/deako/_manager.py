@@ -29,7 +29,6 @@ CONNECTED_POLLING_INTERVAL_S = 1
 CONNECTION_TIMEOUT_S = 10
 # Wait before trying again after connecting failed unexpectedly.
 CONNECTION_RETRY_DELAY_S = 10
-WORKER_WAIT_S = 0.5
 PING_WORKER_WAIT_S = 10
 # Max time to wait for the device to answer a request before sending the next.
 RESPONSE_TIMEOUT_S = 1.0
@@ -54,7 +53,6 @@ class _ManagerState:
 
     connecting: bool = False
     canceled: bool = False
-    logged_send_error = False
 
 
 # pylint: disable-next=too-many-instance-attributes
@@ -62,7 +60,6 @@ class _Manager:
     """Manage the socket connection to Deako local integrations."""
 
     maintain_worker: asyncio.Task[None] | None = None
-    worker: asyncio.Task[None] | None = None
     connection: _Connection | None = None
     tasks: set[asyncio.Task[None]]
     client_name: str | None
@@ -141,9 +138,6 @@ class _Manager:
             task.cancel()
         self.tasks.clear()
 
-        if self.worker is not None:
-            self.worker.cancel()
-            self.worker = None
         if self.maintain_worker is not None:
             self.maintain_worker.cancel()
             self.maintain_worker = None
@@ -224,11 +218,7 @@ class _Manager:
         )
 
     async def send_state_change(
-        self,
-        uuid: str,
-        power: bool,
-        dim: int | None = None,
-        completed_callback: Callable[[], None] | None = None,
+        self, uuid: str, power: bool, dim: int | None = None,
     ) -> None:
         """Send a state change request."""
         await self.send_request(
@@ -236,8 +226,7 @@ class _Manager:
                 state_change_request(
                     uuid, power, dim, source=self.client_name,
                 ),
-                completed_callback=completed_callback,
-            )
+            ),
         )
 
     async def send_request(self, req: _Request) -> bool:
