@@ -7,7 +7,7 @@ from ._discover import (
 )
 
 __all__ = [
-    'DeakoDiscoverer',
-    'DevicesNotFoundError',
-    'DevicesNotFoundException',
+    "DeakoDiscoverer",
+    "DevicesNotFoundError",
+    "DevicesNotFoundException",
 ]

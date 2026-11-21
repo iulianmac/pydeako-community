@@ -200,8 +200,8 @@ def test_parse_data_partial(socket_connection_mock, asyncio_mock):
     items = str.encode(
         "\r\n".join(
             [
-                json_message_data[0: len(json_message_data) // 2],
-                json_message_data[len(json_message_data) // 2:],
+                json_message_data[0 : len(json_message_data) // 2],
+                json_message_data[len(json_message_data) // 2 :],
             ]
         )
     )
@@ -226,9 +226,12 @@ def test_parse_data_partial(socket_connection_mock, asyncio_mock):
 def _parsed(*chunks: bytes) -> list[object]:
     """Feed chunks to a _Connection's parser and return what it delivered."""
     delivered: list[object] = []
-    with patch("pydeako.deako.utils._connection.asyncio"), patch(
-        "pydeako.deako.utils._connection._SocketConnection",
-        spec=_SocketConnection,
+    with (
+        patch("pydeako.deako.utils._connection.asyncio"),
+        patch(
+            "pydeako.deako.utils._connection._SocketConnection",
+            spec=_SocketConnection,
+        ),
     ):
         conn = _Connection("127.0.0.1:23", "dev", delivered.append)
     for chunk in chunks:
@@ -249,7 +252,8 @@ def test_parse_data_utf8_split_across_reads():
 def test_parse_data_skips_invalid_line():
     """Test a line that isn't JSON doesn't block later messages."""
     assert _parsed(b"not json\r\n", b'{"a": 1}\r\n', b'{"b": 2}\r\n') == [
-        {"a": 1}, {"b": 2},
+        {"a": 1},
+        {"b": 2},
     ]
 
 
@@ -261,7 +265,8 @@ def test_parse_data_skips_invalid_object_line():
 def test_parse_data_resyncs_on_indented_message():
     """Test recovery when the next message starts after whitespace."""
     assert _parsed(b'{"a": }\r\n  {"b": 2}\r\n\t{"c": 3}\r\n') == [
-        {"b": 2}, {"c": 3},
+        {"b": 2},
+        {"c": 3},
     ]
 
 

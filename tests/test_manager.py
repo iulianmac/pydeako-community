@@ -268,7 +268,9 @@ async def test_send_get_device_list(device_list_request_mock, request_mock):
 @patch("pydeako.deako._manager._Manager.send_request")
 @pytest.mark.asyncio
 async def test_send_state_change(
-    send_request_mock, state_change_request_mock, request_mock,
+    send_request_mock,
+    state_change_request_mock,
+    request_mock,
 ):
     """Test _Manager.send_state_change."""
     client_name = Mock()
@@ -406,7 +408,8 @@ async def test_send_request_no_response():
     """Test requests the device doesn't answer don't block the next one."""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
     manager.connection, log = _device_connection(
-        manager, replies=[None, None],
+        manager,
+        replies=[None, None],
     )
 
     results = await asyncio.gather(
@@ -453,7 +456,8 @@ async def test_send_request_gives_up_when_busy():
     """Test a request is given up after MAX_BUSY_RETRIES busy answers."""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
     manager.connection, log = _device_connection(
-        manager, replies=["busy", "busy", "busy", "ok"],
+        manager,
+        replies=["busy", "busy", "busy", "ok"],
     )
 
     assert not await manager.send_request(_control_requests(1)[0])
@@ -466,7 +470,8 @@ async def test_send_request_other_error_not_retried():
     """Test a request answered with an error other than busy isn't resent."""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
     manager.connection, log = _device_connection(
-        manager, replies=["malformed"],
+        manager,
+        replies=["malformed"],
     )
 
     assert await manager.send_request(_control_requests(1)[0])
@@ -590,13 +595,16 @@ async def test_background_connect_error_retries(connection_mock, worker_mock):
 @patch("pydeako.deako._manager.asyncio.sleep", new_callable=AsyncMock)
 @pytest.mark.asyncio
 async def test_init_connection_connected_at_deadline(
-    sleep_mock, connection_mock, create_connection_mock, worker_mock,
+    sleep_mock,
+    connection_mock,
+    create_connection_mock,
+    worker_mock,
 ):
     """Test a connection made in the last polling interval is kept."""
     polls = CONNECTION_TIMEOUT_S  # still connecting after every interval
-    connection_mock.return_value.is_connected.side_effect = (
-        [False] * polls + [True] * 5
-    )
+    connection_mock.return_value.is_connected.side_effect = [False] * polls + [
+        True
+    ] * 5
     manager = _Manager(AsyncMock(return_value=("1.2.3.4:23", "dev")), Mock())
 
     await manager.init_connection()

@@ -30,8 +30,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements.txt -r requirements_test.txt
       - run: ruff check pydeako tests
+      - run: ruff format --check pydeako tests
       - run: pylint pydeako tests
-      - run: pycodestyle pydeako tests
       - run: mypy pydeako tests
       - run: pytest
 

@@ -4,6 +4,7 @@ Types and functions to generate requests to Deako devices.
 Source reference:
 https://github.com/DeakoLights/local-integrations/blob/master/API.md
 """
+
 from ._const import ErrorCode, RequestType, ResponseStatus, ResponseType
 from ._request import (
     device_list_request,
@@ -12,11 +13,11 @@ from ._request import (
 )
 
 __all__ = [
-    'ErrorCode',
-    'RequestType',
-    'ResponseStatus',
-    'ResponseType',
-    'device_list_request',
-    'device_ping_request',
-    'state_change_request',
+    "ErrorCode",
+    "RequestType",
+    "ResponseStatus",
+    "ResponseType",
+    "device_list_request",
+    "device_ping_request",
+    "state_change_request",
 ]

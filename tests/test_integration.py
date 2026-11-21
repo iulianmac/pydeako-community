@@ -45,7 +45,9 @@ class FakeDeakoConnect:
     async def start(self) -> None:
         """Start listening on a free loopback port."""
         self.server = await asyncio.start_server(
-            self._handle, "127.0.0.1", 0,
+            self._handle,
+            "127.0.0.1",
+            0,
         )
         self.port = self.server.sockets[0].getsockname()[1]
 
@@ -78,7 +80,9 @@ class FakeDeakoConnect:
             await writer.drain()
 
     async def _send(
-        self, writer: asyncio.StreamWriter, message: dict[str, Any],
+        self,
+        writer: asyncio.StreamWriter,
+        message: dict[str, Any],
     ) -> None:
         writer.write(json.dumps(message, ensure_ascii=False).encode() + CRLF)
         await writer.drain()
@@ -88,7 +92,9 @@ class FakeDeakoConnect:
             await self._send(writer, message)
 
     async def _handle(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
     ) -> None:
         self.connections += 1
         self.writers.append(writer)
@@ -100,7 +106,8 @@ class FakeDeakoConnect:
                 self.received.append(request)
                 self.outstanding += 1
                 self.max_outstanding = max(
-                    self.max_outstanding, self.outstanding,
+                    self.max_outstanding,
+                    self.outstanding,
                 )
                 await asyncio.sleep(self.response_delay_s)
                 self.outstanding -= 1
@@ -109,7 +116,9 @@ class FakeDeakoConnect:
             self.client_closed.set()
 
     async def _answer(
-        self, writer: asyncio.StreamWriter, request: dict[str, Any],
+        self,
+        writer: asyncio.StreamWriter,
+        request: dict[str, Any],
     ) -> None:
         base = {
             "transactionId": request["transactionId"],
@@ -121,17 +130,23 @@ class FakeDeakoConnect:
         if request["type"] == "PING":
             await self._send(writer, {**base, "status": "ok"})
         elif request["type"] == "DEVICE_LIST":
-            await self._send(writer, {
-                **base,
-                "status": "ok",
-                "data": {"number_of_devices": len(self.devices)},
-            })
+            await self._send(
+                writer,
+                {
+                    **base,
+                    "status": "ok",
+                    "data": {"number_of_devices": len(self.devices)},
+                },
+            )
             for uuid, device in self.devices.items():
-                await self._send(writer, {
-                    "type": "DEVICE_FOUND",
-                    "src": "deako",
-                    "data": {"uuid": uuid, **device},
-                })
+                await self._send(
+                    writer,
+                    {
+                        "type": "DEVICE_FOUND",
+                        "src": "deako",
+                        "data": {"uuid": uuid, **device},
+                    },
+                )
         elif request["type"] == "CONTROL":
             await self._answer_control(writer, base, request)
 
@@ -143,24 +158,32 @@ class FakeDeakoConnect:
     ) -> None:
         if self.busy_replies:
             self.busy_replies -= 1
-            await self._send(writer, {
-                **base,
-                "status": "error",
-                "data": {"code": "DEVICE_BUSY", "message": "Device is busy"},
-            })
+            await self._send(
+                writer,
+                {
+                    **base,
+                    "status": "error",
+                    "data": {
+                        "code": "DEVICE_BUSY",
+                        "message": "Device is busy",
+                    },
+                },
+            )
             return
         await self._send(writer, {**base, "status": "ok"})
         target = request["data"]["target"]
         self.devices[target]["state"].update(request["data"]["state"])
-        await self._broadcast({
-            "type": "EVENT",
-            "src": "deako",
-            "data": {
-                "eventType": "DEVICE_STATE_CHANGE",
-                "target": target,
-                "state": dict(self.devices[target]["state"]),
-            },
-        })
+        await self._broadcast(
+            {
+                "type": "EVENT",
+                "src": "deako",
+                "data": {
+                    "eventType": "DEVICE_STATE_CHANGE",
+                    "target": target,
+                    "state": dict(self.devices[target]["state"]),
+                },
+            }
+        )
 
 
 def _devices() -> dict[str, dict[str, Any]]:
@@ -229,7 +252,8 @@ async def test_find_devices(client: Deako) -> None:
 
 @pytest.mark.asyncio
 async def test_messages_end_with_crlf(
-    bridge: FakeDeakoConnect, client: Deako,
+    bridge: FakeDeakoConnect,
+    client: Deako,
 ) -> None:
     """Test every message sent to the bridge is one CRLF-terminated line."""
     await client.control_device("uuid-1", True, 70)
@@ -237,14 +261,16 @@ async def test_messages_end_with_crlf(
     lines = bytes(bridge.raw_received).split(CRLF)
     assert lines[-1] == b""
     assert [json.loads(line)["type"] for line in lines[:-1]] == [
-        "DEVICE_LIST", "CONTROL",
+        "DEVICE_LIST",
+        "CONTROL",
     ]
     assert bridge.received[-1]["src"] == "tests"
 
 
 @pytest.mark.asyncio
 async def test_control_device_state_comes_from_event(
-    bridge: FakeDeakoConnect, client: Deako,
+    bridge: FakeDeakoConnect,
+    client: Deako,
 ) -> None:
     """Test a control request updates the state via the bridge's event."""
     updated = asyncio.Event()
@@ -259,14 +285,15 @@ async def test_control_device_state_comes_from_event(
 
 @pytest.mark.asyncio
 async def test_concurrent_controls_are_sent_one_at_a_time(
-    bridge: FakeDeakoConnect, client: Deako,
+    bridge: FakeDeakoConnect,
+    client: Deako,
 ) -> None:
     """Test concurrent requests wait for the previous response."""
     bridge.response_delay_s = 0.05
 
-    await asyncio.gather(*(
-        client.control_device(uuid, True) for uuid in bridge.devices
-    ))
+    await asyncio.gather(
+        *(client.control_device(uuid, True) for uuid in bridge.devices)
+    )
 
     controls = [r for r in bridge.received if r["type"] == "CONTROL"]
     assert len(controls) == 3
@@ -276,7 +303,9 @@ async def test_concurrent_controls_are_sent_one_at_a_time(
 
 @pytest.mark.asyncio
 async def test_device_busy_is_retried(
-    bridge: FakeDeakoConnect, client: Deako, monkeypatch: pytest.MonkeyPatch,
+    bridge: FakeDeakoConnect,
+    client: Deako,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test a DEVICE_BUSY answer is retried with a new transaction id."""
     monkeypatch.setattr(_manager, "BUSY_RETRY_DELAY_S", 0.01)
@@ -310,7 +339,8 @@ async def test_disconnect_closes_the_connection(
 
 @pytest.mark.asyncio
 async def test_bridge_closing_the_connection_does_not_block(
-    bridge: FakeDeakoConnect, client: Deako,
+    bridge: FakeDeakoConnect,
+    client: Deako,
 ) -> None:
     """Test the event loop keeps running when the bridge closes the socket."""
     connection = client.connection_manager.connection
@@ -338,7 +368,9 @@ async def test_bridge_closing_the_connection_does_not_block(
 
 @pytest.mark.asyncio
 async def test_reconnects_after_the_bridge_drops_the_connection(
-    bridge: FakeDeakoConnect, client: Deako, monkeypatch: pytest.MonkeyPatch,
+    bridge: FakeDeakoConnect,
+    client: Deako,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test the client reconnects after a bridge reboot and works again."""
     monkeypatch.setattr(_manager, "PING_WORKER_WAIT_S", 0.05)

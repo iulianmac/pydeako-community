@@ -1,4 +1,5 @@
 """Connection over socket."""
+
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
@@ -97,7 +98,10 @@ class Deako:
         self.expected_devices = 0
 
     def update_state(
-        self, uuid: str, power: bool, dim: int | None = None,
+        self,
+        uuid: str,
+        power: bool,
+        dim: int | None = None,
     ) -> None:
         """Update an in memory device's state."""
         if uuid not in self.devices:
@@ -179,15 +183,20 @@ class Deako:
         state = _parse_state(data.get("state"))
         if not isinstance(target, str) or state is None:
             _LOGGER.error(
-                "Ignoring invalid state change for %s", _short(target),
+                "Ignoring invalid state change for %s",
+                _short(target),
             )
             return
         self.update_state(target, *state)
 
     # pylint: disable-next=too-many-arguments
     def record_device(
-        self, name: str, uuid: str, dimmable: bool,
-        power: bool, dim: int | None = None,
+        self,
+        name: str,
+        uuid: str,
+        dimmable: bool,
+        power: bool,
+        dim: int | None = None,
     ) -> None:
         """Store a device in local memory."""
         if uuid not in self.devices:
@@ -224,7 +233,8 @@ class Deako:
         # wait for device list
         while self.expected_devices == 0 and remaining > 0:
             _LOGGER.debug(
-                "waiting for device list... time remaining: %is", remaining,
+                "waiting for device list... time remaining: %is",
+                remaining,
             )
             await asyncio.sleep(DEVICE_LIST_POLLING_INTERVAL_S)
             remaining -= DEVICE_LIST_POLLING_INTERVAL_S
@@ -256,7 +266,10 @@ class Deako:
             )
 
     async def control_device(
-        self, uuid: str, power: bool, dim: int | None = None,
+        self,
+        uuid: str,
+        power: bool,
+        dim: int | None = None,
     ) -> None:
         """
         Ask the device to change its state.

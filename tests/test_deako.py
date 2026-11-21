@@ -154,7 +154,9 @@ def test_incoming_json_device_list():
 @pytest.mark.parametrize("dim", [None, 69])
 @patch("pydeako.deako._deako.Deako.record_device")
 def test_incoming_json_device_found(
-    record_device_mock, dim, capabilities_param,
+    record_device_mock,
+    dim,
+    capabilities_param,
 ):
     """Test deako.incoming_json device with capabilities."""
     [capabilities, dimmable] = capabilities_param
@@ -187,7 +189,8 @@ def test_incoming_json_device_found(
 @pytest.mark.parametrize("dim", [None, 69])
 @patch("pydeako.deako._deako.Deako.record_device")
 def test_incoming_json_device_found_no_capabilities(
-    record_device_mock, dim,
+    record_device_mock,
+    dim,
 ):
     """Test deako.incoming_json device, no capabilities."""
     device_id = str(uuid4())
@@ -400,7 +403,9 @@ async def test_control_device(manager_mock):
     await deako.control_device(device_id, power, dim)
 
     manager_mock.return_value.send_state_change.assert_called_once_with(
-        device_id, power, dim,
+        device_id,
+        power,
+        dim,
     )
 
 
@@ -527,8 +532,12 @@ async def test_find_devices_invalid_count_raises_find_devices_error():
         {"name": "Lamp", "uuid": "u", "state": {"power": "on"}},
         {"name": "Lamp", "uuid": "u", "state": {"power": 2}},
         {"name": "Lamp", "uuid": "u", "state": "on"},
-        {"name": "Lamp", "uuid": "u", "capabilities": 3,
-         "state": {"power": True}},
+        {
+            "name": "Lamp",
+            "uuid": "u",
+            "capabilities": 3,
+            "state": {"power": True},
+        },
     ],
 )
 def test_incoming_json_device_found_invalid(data):
@@ -559,29 +568,48 @@ def test_incoming_json_device_found_capped():
     deako = Deako(Mock())
 
     for i in range(5):
-        deako.incoming_json({
-            "type": "DEVICE_FOUND",
-            "data": {"name": "Lamp", "uuid": f"u{i}",
-                     "state": {"power": True}},
-        })
+        deako.incoming_json(
+            {
+                "type": "DEVICE_FOUND",
+                "data": {
+                    "name": "Lamp",
+                    "uuid": f"u{i}",
+                    "state": {"power": True},
+                },
+            }
+        )
 
     assert len(deako.get_devices()) == 3
 
 
 @pytest.mark.parametrize(
     ("dim", "stored"),
-    [(50.0, 50), (49.6, 50), (0, 0), (101, None), (-1, None), ("5", None),
-     (True, None), (float("nan"), None)],
+    [
+        (50.0, 50),
+        (49.6, 50),
+        (0, 0),
+        (101, None),
+        (-1, None),
+        ("5", None),
+        (True, None),
+        (float("nan"), None),
+    ],
 )
 def test_incoming_json_device_found_dim(dim, stored):
     """Test dim is read as an int from 0 to 100; anything else is ignored."""
     deako = Deako(Mock())
 
-    deako.incoming_json({
-        "type": "DEVICE_FOUND",
-        "data": {"name": "Lamp", "uuid": "u", "capabilities": "power+dim",
-                 "state": {"power": True, "dim": dim}},
-    })
+    deako.incoming_json(
+        {
+            "type": "DEVICE_FOUND",
+            "data": {
+                "name": "Lamp",
+                "uuid": "u",
+                "capabilities": "power+dim",
+                "state": {"power": True, "dim": dim},
+            },
+        }
+    )
 
     assert deako.get_state("u") == {"power": True, "dim": stored}
 
@@ -615,12 +643,19 @@ def test_incoming_json_event_lenient_values(state, expected):
         # handler raises: data isn't an object
         {"type": "EVENT", "data": None, "junk": "x" * 10_000},
         # invalid device with a huge, multi-line uuid
-        {"type": "DEVICE_FOUND",
-         "data": {"name": 1, "uuid": "u\r\n" * 5_000,
-                  "state": {"power": True}}},
+        {
+            "type": "DEVICE_FOUND",
+            "data": {
+                "name": 1,
+                "uuid": "u\r\n" * 5_000,
+                "state": {"power": True},
+            },
+        },
         # invalid event target
-        {"type": "EVENT",
-         "data": {"target": ["t"] * 5_000, "state": {"power": "on"}}},
+        {
+            "type": "EVENT",
+            "data": {"target": ["t"] * 5_000, "state": {"power": "on"}},
+        },
     ],
 )
 def test_incoming_json_logs_are_bounded(message, caplog):

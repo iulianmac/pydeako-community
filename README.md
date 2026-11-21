@@ -68,8 +68,8 @@ if __name__ == "__main__":
 ### Checks
 
 1. `ruff check pydeako tests`
-2. `pylint pydeako tests`
-3. `pycodestyle pydeako tests`
+2. `ruff format --check pydeako tests`
+3. `pylint pydeako tests`
 4. `mypy pydeako tests`
 5. `pytest`
 

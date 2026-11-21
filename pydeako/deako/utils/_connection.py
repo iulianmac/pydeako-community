@@ -117,13 +117,15 @@ class _Connection:
         """
         text = self.utf8_decoder.decode(data)
         _LOGGER.debug(
-            "[%s] Raw message received: %r", self.format_name(), text,
+            "[%s] Raw message received: %r",
+            self.format_name(),
+            text,
         )
         if self.skipping_line:
             line_end = text.find("\n")
             if line_end == -1:
                 return
-            text = text[line_end + 1:]
+            text = text[line_end + 1 :]
             self.skipping_line = False
 
         buffer = self.message_buffer + text
@@ -135,16 +137,18 @@ class _Connection:
                 if next_message is None:
                     break  # incomplete, wait for more data
                 _LOGGER.warning(
-                    "Skipping invalid message from %s", self.format_name(),
+                    "Skipping invalid message from %s",
+                    self.format_name(),
                 )
-                buffer = buffer[next_message.start() + 1:]
+                buffer = buffer[next_message.start() + 1 :]
                 continue
             buffer = buffer[end:]
             if isinstance(message, dict):
                 self.on_data_callback(message)
             else:
                 _LOGGER.warning(
-                    "Skipping non-object message from %s", self.format_name(),
+                    "Skipping non-object message from %s",
+                    self.format_name(),
                 )
 
         if len(buffer) > MAX_MESSAGE_LENGTH:
@@ -155,7 +159,7 @@ class _Connection:
             )
             # Keep what follows the last complete line, unless that part is
             # itself too long; then skip until the current line ends.
-            rest = buffer[buffer.rfind("\n") + 1:]
+            rest = buffer[buffer.rfind("\n") + 1 :]
             self.skipping_line = len(rest) > MAX_MESSAGE_LENGTH
             buffer = "" if self.skipping_line else rest
         self.message_buffer = buffer

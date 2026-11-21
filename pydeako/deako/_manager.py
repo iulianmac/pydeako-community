@@ -219,13 +219,19 @@ class _Manager:
         )
 
     async def send_state_change(
-        self, uuid: str, power: bool, dim: int | None = None,
+        self,
+        uuid: str,
+        power: bool,
+        dim: int | None = None,
     ) -> None:
         """Send a state change request."""
         await self.send_request(
             _Request(
                 state_change_request(
-                    uuid, power, dim, source=self.client_name,
+                    uuid,
+                    power,
+                    dim,
+                    source=self.client_name,
                 ),
             ),
         )
@@ -255,7 +261,9 @@ class _Manager:
         return False
 
     async def _send_and_wait(
-        self, connection: _Connection, req: _Request,
+        self,
+        connection: _Connection,
+        req: _Request,
     ) -> dict[str, Any] | None:
         """Send a request and return its response, or None if none came."""
         transaction_id = req.get_transaction_id()

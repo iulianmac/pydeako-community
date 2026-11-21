@@ -1,4 +1,5 @@
 """Test the discovery client, patching the address pool and zeroconf lib."""
+
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
@@ -154,7 +155,8 @@ def test_listener_add_service(mock_inet_ntoa):
     mock_inet_ntoa.assert_called_with(address)
     zc_mock.get_service_info.assert_called_with(_type, name)
     add_callback.assert_called_once_with(
-        name, [f"{converted_address}:{port}"],
+        name,
+        [f"{converted_address}:{port}"],
     )
     remove_callback.assert_not_called()
 
@@ -206,7 +208,8 @@ def test_listener_update_service(mock_inet_ntoa):
     zc_mock.get_service_info.assert_called_with(_type, name)
     # one call that swaps the addresses, so the pool is never empty between
     add_callback.assert_called_once_with(
-        name, [f"{converted_address}:{port}"],
+        name,
+        [f"{converted_address}:{port}"],
     )
     remove_callback.assert_not_called()
 
