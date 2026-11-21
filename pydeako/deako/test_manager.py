@@ -11,7 +11,7 @@ import pytest
 
 from ..discover import DevicesNotFoundException
 from ..models import state_change_request
-from ._manager import _Manager, CONNECTION_TIMEOUT_S
+from ._manager import _is_device_busy, _Manager, CONNECTION_TIMEOUT_S
 from ._request import _Request
 
 
@@ -488,3 +488,40 @@ async def test_incoming_json_resolves_pending_response():
 
     assert pending.result() == message
     callback.assert_called_once_with(message)
+
+
+@pytest.mark.parametrize("data", ["x", 1, ["DEVICE_BUSY"], None])
+def test_is_device_busy_without_object_data(data):
+    """Test an error response whose data isn't an object."""
+    assert not _is_device_busy({"status": "error", "data": data})
+
+
+def test_incoming_json_unhashable_transaction_id():
+    """Test a message whose transactionId can't be looked up."""
+    callback = Mock()
+    manager = _Manager(AsyncMock(), callback)
+    message = {"transactionId": ["x"], "type": "EVENT"}
+
+    manager.incoming_json(message)
+
+    callback.assert_called_once_with(message)
+
+
+@patch("pydeako.deako._manager._Manager.create_connection_task")
+@patch("pydeako.deako._manager.PING_WORKER_WAIT_S", 0)
+@pytest.mark.asyncio
+async def test_maintain_connection_worker_error_reconnects(
+    create_connection_mock,
+):
+    """Test an unexpected error while pinging leads to a reconnect."""
+    manager = _Manager(AsyncMock(), Mock())
+    manager.send_request = AsyncMock(  # type: ignore[method-assign]
+        side_effect=RuntimeError("boom"),
+    )
+    worker = asyncio.create_task(manager.maintain_connection_worker())
+    manager.maintain_worker = worker
+
+    await asyncio.wait([worker])
+
+    assert manager.maintain_worker is None
+    create_connection_mock.assert_called_once()

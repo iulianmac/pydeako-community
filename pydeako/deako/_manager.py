@@ -41,7 +41,8 @@ def _is_device_busy(response: dict[str, Any] | None) -> bool:
         return False
     if response.get("status") != ResponseStatus.ERROR:
         return False
-    return (response.get("data") or {}).get("code") == ErrorCode.DEVICE_BUSY
+    data = response.get("data")
+    return isinstance(data, dict) and data.get("code") == ErrorCode.DEVICE_BUSY
 
 
 @dataclass
@@ -155,15 +156,19 @@ class _Manager:
     async def maintain_connection_worker(self) -> None:
         """Monitor connection and restart if there's a failure."""
         await asyncio.sleep(PING_WORKER_WAIT_S)
-        while True:
-            if self.state.canceled:
-                break
+        while not self.state.canceled:
             self.pong_received = False
             _LOGGER.debug("Pinging for responsiveness")
-            await self.send_request(
-                _Request(device_ping_request(source=self.client_name)),
-            )
-            await asyncio.sleep(PING_WORKER_WAIT_S)
+            try:
+                await self.send_request(
+                    _Request(device_ping_request(source=self.client_name)),
+                )
+                await asyncio.sleep(PING_WORKER_WAIT_S)
+            # An unexpected error must not stop the liveness check for good;
+            # treat it like a missing pong and reconnect.
+            except Exception:  # pylint: disable=broad-exception-caught
+                _LOGGER.exception("Pinging the device failed")
+                self.pong_received = False
             if self.pong_received:
                 _LOGGER.debug("Pong received")
             else:
@@ -174,8 +179,12 @@ class _Manager:
 
     def incoming_json(self, incoming_json: dict[str, Any]) -> None:
         """Handle incoming json."""
-        transaction_id = incoming_json.get("transactionId", "")
-        pending = self.pending_responses.get(transaction_id)
+        transaction_id = incoming_json.get("transactionId")
+        pending = (
+            self.pending_responses.get(transaction_id)
+            if isinstance(transaction_id, str)
+            else None
+        )
         if pending is not None and not pending.done():
             pending.set_result(incoming_json)
         response_type = incoming_json.get("type")
