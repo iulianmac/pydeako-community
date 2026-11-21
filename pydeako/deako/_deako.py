@@ -3,7 +3,7 @@ import asyncio
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, TypeGuard
 
 from ..models import ResponseType
 from ._manager import _Manager
@@ -30,6 +30,40 @@ DEVICE_LIST_POLLING_INTERVAL_S = 1
 DEVICE_FOUND_POLLING_INTERVAL_S = 1
 
 CAPABILITY_DIMMABLE = "dim"
+# Upper bound on devices accepted from one bridge.
+MAX_DEVICES = 1000
+MAX_DIM = 100
+
+
+def _is_int(value: object) -> TypeGuard[int]:
+    """Return whether value is an int (bool doesn't count)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _parse_dim(dim: object) -> int | None:
+    """Return dim as an int from 0 to 100, or None if missing or invalid."""
+    # Home Assistant sends whole floats such as 50.0.
+    if isinstance(dim, bool) or not isinstance(dim, (int, float)):
+        return None
+    if not 0 <= dim <= MAX_DIM:  # also rejects NaN
+        return None
+    return round(dim)
+
+
+def _parse_state(state: object) -> tuple[bool, int | None] | None:
+    """
+    Return (power, dim) from a device state, or None if power is invalid.
+
+    An invalid dim is ignored, so the power change still applies.
+    """
+    if not isinstance(state, dict):
+        return None
+    power = state.get("power")
+    if _is_int(power) and power in (0, 1):
+        power = bool(power)
+    if not isinstance(power, bool):
+        return None
+    return power, _parse_dim(state.get("dim"))
 
 
 class Deako:
@@ -79,31 +113,56 @@ class Deako:
         """Parse incoming socket data which is json."""
         try:
             if in_data["type"] == ResponseType.DEVICE_LIST:
-                subdata = in_data["data"]
-                self.expected_devices = subdata["number_of_devices"]
+                self._handle_device_list(in_data["data"])
             elif in_data["type"] == ResponseType.DEVICE_FOUND:
-                subdata = in_data["data"]
-                state = subdata["state"]
-                if subdata.get("capabilities") is not None:
-                    dimmable = CAPABILITY_DIMMABLE in subdata["capabilities"]
-                else:
-                    # support older local api versions
-                    dimmable = state.get("dim") is not None
-                self.record_device(
-                    subdata["name"],
-                    subdata["uuid"],
-                    dimmable,
-                    state["power"],
-                    state.get("dim"),
-                )
+                self._handle_device_found(in_data["data"])
             elif in_data["type"] == ResponseType.EVENT:
-                subdata = in_data["data"]
-                state = subdata["state"]
-                self.update_state(
-                    subdata["target"], state["power"], state.get("dim"),
-                )
+                self._handle_event(in_data["data"])
         except Exception as exc:  # pylint: disable=broad-exception-caught
             _LOGGER.error("Failed to parse %s: %s", in_data, exc)
+
+    def _handle_device_list(self, data: dict[str, Any]) -> None:
+        """Store how many devices the bridge is about to report."""
+        count = data.get("number_of_devices")
+        if not _is_int(count) or not 0 <= count <= MAX_DEVICES:
+            _LOGGER.error("Ignoring invalid device count %r", count)
+            return
+        self.expected_devices = count
+
+    def _handle_device_found(self, data: dict[str, Any]) -> None:
+        """Record a device the bridge reported."""
+        name = data.get("name")
+        uuid = data.get("uuid")
+        capabilities = data.get("capabilities")
+        state = _parse_state(data.get("state"))
+        if (
+            not isinstance(name, str)
+            or not isinstance(uuid, str)
+            or not isinstance(capabilities, (str, list, type(None)))
+            or state is None
+        ):
+            _LOGGER.error("Ignoring invalid device %r", uuid)
+            return
+        if uuid not in self.devices and len(self.devices) >= MAX_DEVICES:
+            _LOGGER.error("Ignoring device %s: over %d devices", uuid,
+                          MAX_DEVICES)
+            return
+        power, dim = state
+        if capabilities is not None:
+            dimmable = CAPABILITY_DIMMABLE in capabilities
+        else:
+            # support older local api versions
+            dimmable = dim is not None
+        self.record_device(name, uuid, dimmable, power, dim)
+
+    def _handle_event(self, data: dict[str, Any]) -> None:
+        """Apply a device state change event."""
+        target = data.get("target")
+        state = _parse_state(data.get("state"))
+        if not isinstance(target, str) or state is None:
+            _LOGGER.error("Ignoring invalid state change for %r", target)
+            return
+        self.update_state(target, *state)
 
     # pylint: disable-next=too-many-arguments
     def record_device(
