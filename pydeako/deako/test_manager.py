@@ -154,8 +154,11 @@ def test_close():
 
 
 @patch("pydeako.deako._manager.asyncio")
-@patch("pydeako.deako._manager._Manager.init_connection")
-def test_create_connection_task(init_connection_mock, asyncio_mock):
+@patch(
+    "pydeako.deako._manager._Manager._connect_in_background",
+    new_callable=Mock,
+)
+def test_create_connection_task(connect_mock, asyncio_mock):
     """Test _Manager.create_connection_task."""
     manager = _Manager(AsyncMock(), Mock())
 
@@ -164,7 +167,8 @@ def test_create_connection_task(init_connection_mock, asyncio_mock):
     asyncio_mock.create_task.assert_called_once()
     task = asyncio_mock.create_task.return_value
     task.add_done_callback.assert_called_once()
-    init_connection_mock.assert_called_once()
+    connect_mock.assert_called_once()
+    asyncio_mock.create_task.assert_called_once_with(connect_mock.return_value)
     assert len(manager.tasks) == 1
 
 
@@ -525,3 +529,61 @@ async def test_maintain_connection_worker_error_reconnects(
 
     assert manager.maintain_worker is None
     create_connection_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_init_connection_unexpected_error_allows_retry():
+    """Test an unexpected error doesn't leave the manager 'connecting'."""
+    get_address = AsyncMock(side_effect=RuntimeError("boom"))
+    manager = _Manager(get_address, Mock())
+
+    with pytest.raises(RuntimeError):
+        await manager.init_connection()
+
+    assert not manager.state.connecting
+    with pytest.raises(RuntimeError):
+        await manager.init_connection()
+    assert get_address.await_count == 2
+
+
+@patch("pydeako.deako._manager.CONNECTED_POLLING_INTERVAL_S", 0.01)
+@patch("pydeako.deako._manager._Connection")
+@pytest.mark.asyncio
+async def test_init_connection_cancelled_closes_connection(connection_mock):
+    """Test cancelling while waiting to connect closes the connection."""
+    connection_mock.return_value.is_connected.return_value = False
+    manager = _Manager(AsyncMock(return_value=("1.2.3.4:23", "dev")), Mock())
+    task = asyncio.create_task(manager.init_connection())
+    await asyncio.sleep(0.05)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    connection_mock.return_value.close.assert_called_once()
+    assert not manager.state.connecting
+
+
+@patch("pydeako.deako._manager.CONNECTION_RETRY_DELAY_S", 0)
+@patch("pydeako.deako._manager.CONNECTED_POLLING_INTERVAL_S", 0.01)
+@patch("pydeako.deako._manager._Manager.maintain_connection_worker")
+@patch("pydeako.deako._manager._Connection")
+@pytest.mark.asyncio
+async def test_background_connect_error_retries(connection_mock, worker_mock):
+    """Test an unexpected error in a background connect is retried."""
+    connection_mock.return_value.is_connected.return_value = True
+    get_address = AsyncMock(
+        side_effect=[RuntimeError("boom"), ("1.2.3.4:23", "dev")],
+    )
+    manager = _Manager(get_address, Mock())
+
+    manager.create_connection_task()
+    for _ in range(100):
+        await asyncio.sleep(0.01)
+        if manager.connection is not None:
+            break
+
+    assert get_address.await_count == 2
+    assert manager.connection is connection_mock.return_value
+    worker_mock.assert_called_once()
+    manager.close()
