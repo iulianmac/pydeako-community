@@ -111,6 +111,26 @@ async def test_read_socket(
 @patch(
     "pydeako.deako.utils._connection._SocketConnection", spec=_SocketConnection
 )
+@patch("pydeako.deako.utils._connection._Connection.parse_data")
+@pytest.mark.asyncio
+async def test_read_socket_closed_by_device(
+    parse_data_mock, socket_connection_mock, asyncio_mock
+):
+    """Test _Connection.read_socket, device closed the connection (EOF)."""
+    asyncio_mock.get_running_loop.return_value = Mock()
+    conn = _Connection(Mock(), Mock(), Mock())
+    socket_connection_mock.return_value.read_bytes.return_value = b""
+
+    await conn.read_socket()
+
+    parse_data_mock.assert_not_called()
+    assert conn.state == ConnectionState.ERROR
+
+
+@patch("pydeako.deako.utils._connection.asyncio")
+@patch(
+    "pydeako.deako.utils._connection._SocketConnection", spec=_SocketConnection
+)
 def test_parse_data_one_item(socket_connection_mock, asyncio_mock):
     """Test _Connection.parse_data, one message."""
     json_message = {"key": "value"}

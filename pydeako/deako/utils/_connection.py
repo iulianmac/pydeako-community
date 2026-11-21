@@ -84,6 +84,13 @@ class _Connection:
             self.state = ConnectionState.ERROR
             return
 
+        if not data:
+            # An empty read means the device closed the connection. Reading
+            # again would return at once and spin without yielding.
+            _LOGGER.warning("%s closed the connection", self.format_name())
+            self.state = ConnectionState.ERROR
+            return
+
         self.parse_data(data)
 
     def parse_data(self, data: bytes) -> None:

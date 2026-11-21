@@ -306,3 +306,31 @@ async def test_disconnect_closes_the_connection(
 
     await _wait_for(bridge.client_closed)
     assert deako.connection_manager.connection is None
+
+
+@pytest.mark.asyncio
+async def test_bridge_closing_the_connection_does_not_block(
+    bridge: FakeDeakoConnect, client: Deako,
+) -> None:
+    """Test the event loop keeps running when the bridge closes the socket."""
+    connection = client.connection_manager.connection
+    assert connection is not None
+    ticks = 0
+
+    async def tick() -> None:
+        nonlocal ticks
+        while True:
+            ticks += 1
+            await asyncio.sleep(0.01)
+
+    ticker = asyncio.create_task(tick())
+    bridge.drop_clients()
+    for _ in range(100):
+        await asyncio.sleep(0.01)
+        if not connection.tasks:
+            break
+    ticker.cancel()
+
+    assert ticks > 0
+    assert not connection.is_connected()
+    assert not connection.tasks
