@@ -6,7 +6,11 @@ pydeako module provides the following:
 """
 # pylint: disable=duplicate-code
 from .deako import Deako, FindDevicesError
-from .discover import DeakoDiscoverer, DevicesNotFoundException
+from .discover import (
+    DeakoDiscoverer,
+    DevicesNotFoundError,
+    DevicesNotFoundException,
+)
 from .models import (
     RequestType,
     ResponseType,
@@ -18,6 +22,7 @@ from .models import (
 __all__ = [
     'Deako',
     'DeakoDiscoverer',
+    'DevicesNotFoundError',
     'DevicesNotFoundException',
     'FindDevicesError',
     'RequestType',

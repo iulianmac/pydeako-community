@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
-from ._address_pool import EmptyAddressPool, _AddressPool
+from ._address_pool import EmptyAddressPoolError, _AddressPool
 
 DEAKO_TYPE = "_deako._tcp.local."
 TIMEOUT_S = 10
@@ -18,7 +18,7 @@ POLLING_INTERVAL_S = 0.5
 _LOGGER = logging.getLogger(__package__)
 
 
-class DevicesNotFoundException(Exception):
+class DevicesNotFoundError(Exception):
     """No devices found."""
 
     def __init__(
@@ -27,6 +27,10 @@ class DevicesNotFoundException(Exception):
         msg: str = f"No devices found via {DEAKO_TYPE}",
     ) -> None:
         super().__init__(msg, *args)
+
+
+# The name before 0.7, kept so existing imports keep working.
+DevicesNotFoundException = DevicesNotFoundError
 
 
 class DeakoDiscoverer(ServiceBrowser):
@@ -63,8 +67,8 @@ class DeakoDiscoverer(ServiceBrowser):
             await sleep(POLLING_INTERVAL_S)
         try:
             address, name = self.address_pool.get_address()
-        except EmptyAddressPool as exc:
-            raise DevicesNotFoundException() from exc
+        except EmptyAddressPoolError as exc:
+            raise DevicesNotFoundError() from exc
         _LOGGER.debug("Got address %s, with device name %s", address, name)
         return address, name
 

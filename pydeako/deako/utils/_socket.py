@@ -10,7 +10,7 @@ _LOGGER: logging.Logger = logging.getLogger(__package__)
 _MAX_PACKET_SIZE_BYTES = 2048
 
 
-class NoSocketException(Exception):
+class NoSocketError(Exception):
     """No socket to perform ops exception"""
 
 
@@ -44,7 +44,7 @@ class _SocketConnection:
         """Send data to socket."""
         if self.sock is None:
             _LOGGER.error("No socket to send data to")
-            raise NoSocketException()
+            raise NoSocketError()
 
         await self.loop.sock_sendall(self.sock, _bytes)
 
@@ -52,5 +52,5 @@ class _SocketConnection:
         """Read data from socket."""
         if self.sock is None:
             _LOGGER.error("No socket to read")
-            raise NoSocketException()
+            raise NoSocketError()
         return await self.loop.sock_recv(self.sock, _MAX_PACKET_SIZE_BYTES)

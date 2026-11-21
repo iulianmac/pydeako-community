@@ -7,8 +7,8 @@ from uuid import uuid4
 import pytest
 from zeroconf import Zeroconf
 
-from ._address_pool import EmptyAddressPool, _AddressPool
-from ._discover import DeakoDiscoverer, DeakoListener, DevicesNotFoundException
+from ._address_pool import EmptyAddressPoolError, _AddressPool
+from ._discover import DeakoDiscoverer, DeakoListener, DevicesNotFoundError
 
 
 @patch("pydeako.discover._discover.ServiceBrowser.__init__")
@@ -101,20 +101,20 @@ async def test_deako_discoverer_get_address_timeout(
 ):  # pylint: disable=unused-argument
     """
     Test Discoverer.get_address times out and
-    throws DevicesNotFoundException.
+    throws DevicesNotFoundError.
     """
     # use instance as the mock as this is what will be called
     mock_address_pool = mock_address_pool.return_value
     zc_mock = Mock(Zeroconf)
 
     mock_address_pool.available_addresses.return_value = 0
-    mock_address_pool.get_address.side_effect = EmptyAddressPool()
+    mock_address_pool.get_address.side_effect = EmptyAddressPoolError()
 
     deako_discoverer = DeakoDiscoverer(zc_mock)
 
     assert deako_discoverer is not None
 
-    with pytest.raises(DevicesNotFoundException):
+    with pytest.raises(DevicesNotFoundError):
         await deako_discoverer.get_address()
 
 
@@ -245,7 +245,7 @@ async def test_deako_discoverer_get_address_removed_meanwhile(
 
     with (
         patch.object(pool, "available_addresses", count_then_remove),
-        pytest.raises(DevicesNotFoundException),
+        pytest.raises(DevicesNotFoundError),
     ):
         await discoverer.get_address()
     service_browser_init.assert_called_once()

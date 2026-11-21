@@ -59,6 +59,7 @@ module = [
     "pydeako.discover.test_address_pool",
     "pydeako.discover.test_discover",
     "pydeako.models.test_request",
+    "pydeako.test_api",
     "pydeako.test_integration",
 ]
 disallow_untyped_defs = false
@@ -84,6 +85,7 @@ select = [
     "G",      # flake8-logging-format
     "I",      # isort
     "LOG",    # flake8-logging
+    "N",      # pep8-naming
     "PERF",   # perflint
     "PIE",    # flake8-pie
     "PL",     # pylint

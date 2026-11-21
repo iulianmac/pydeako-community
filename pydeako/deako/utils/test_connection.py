@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from ._connection import ConnectionState, UnknownStateException, _Connection
+from ._connection import ConnectionState, UnknownStateError, _Connection
 from ._socket import _SocketConnection
 
 
@@ -482,5 +482,5 @@ async def test_state_machine_unknown_state_raises(
 
     socket_connection_mock.assert_called_once_with(address, loop_mock)
 
-    with pytest.raises(UnknownStateException):
+    with pytest.raises(UnknownStateError):
         await conn.run()

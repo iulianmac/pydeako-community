@@ -5,7 +5,7 @@ import threading
 from collections import OrderedDict
 
 
-class EmptyAddressPool(Exception):
+class EmptyAddressPoolError(Exception):
     """Empty address pool"""
 
 
@@ -41,7 +41,7 @@ class _AddressPool:
         """Get the next address to try, then move it to the back."""
         with self._lock:
             if not self.addresses:
-                raise EmptyAddressPool()
+                raise EmptyAddressPoolError()
             address, name = next(reversed(self.addresses.items()))
             self.addresses.move_to_end(address, last=False)
             return address, name

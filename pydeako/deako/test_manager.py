@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from ..discover import DevicesNotFoundException
+from ..discover import DevicesNotFoundError
 from ..models import state_change_request
 from ._manager import CONNECTION_TIMEOUT_S, _is_device_busy, _Manager
 from ._request import _Request
@@ -60,7 +60,7 @@ async def test_init_connection_get_address_no_devices(
 
     manager = _Manager(get_address, Mock())
 
-    get_address.side_effect = DevicesNotFoundException()
+    get_address.side_effect = DevicesNotFoundError()
 
     await manager.init_connection()
 

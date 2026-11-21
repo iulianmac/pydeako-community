@@ -26,7 +26,7 @@ _JSON_DECODER = json.JSONDecoder()
 _NEXT_MESSAGE = re.compile(r"\n[ \t\r]*\{")
 
 
-class UnknownStateException(Exception):
+class UnknownStateError(Exception):
     """Unknown state."""
 
 
@@ -236,7 +236,7 @@ class _Connection:
                 break
             else:
                 _LOGGER.error("Unknown state: %s", self.state)
-                raise UnknownStateException(f"Unknown state: {self.state}")
+                raise UnknownStateError(f"Unknown state: {self.state}")
 
     def format_name(self) -> str:
         """Format name."""

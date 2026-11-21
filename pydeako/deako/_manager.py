@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from ..discover import DevicesNotFoundException
+from ..discover import DevicesNotFoundError
 from ..models import (
     ErrorCode,
     ResponseStatus,
@@ -100,7 +100,7 @@ class _Manager:
         """Connect to a discovered device; retry later if that fails."""
         try:
             address, name = await self.get_address()
-        except DevicesNotFoundException:
+        except DevicesNotFoundError:
             _LOGGER.warning("No devices to connect to")
             self.create_connection_task()
             return

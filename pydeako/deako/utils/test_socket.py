@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from ._socket import NoSocketException, _SocketConnection
+from ._socket import NoSocketError, _SocketConnection
 
 
 def test_init():
@@ -81,7 +81,7 @@ async def test_send_bytes_no_socket():
 
     socket_connection = _SocketConnection(Mock(), loop_mock)
 
-    with pytest.raises(NoSocketException):
+    with pytest.raises(NoSocketError):
         await socket_connection.send_bytes(bytes([]))
 
 
@@ -110,7 +110,7 @@ async def test_read_bytes_no_socket():
 
     socket_connection = _SocketConnection(Mock(), loop_mock)
 
-    with pytest.raises(NoSocketException):
+    with pytest.raises(NoSocketError):
         await socket_connection.read_bytes()
 
 

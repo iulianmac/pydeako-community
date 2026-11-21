@@ -23,7 +23,7 @@ async def _discover():
     try:
         address = await d.get_address()
         print(f"Found deako device at {address}!")
-    except discover.DevicesNotFoundException:
+    except discover.DevicesNotFoundError:
         print("No devices found!")
         pass
 
