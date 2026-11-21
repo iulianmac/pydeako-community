@@ -16,8 +16,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
-from .deako import Deako
-from .deako import _deako, _manager
+from .deako import Deako, _deako, _manager
 
 CRLF = b"\r\n"
 WAIT_S = 5

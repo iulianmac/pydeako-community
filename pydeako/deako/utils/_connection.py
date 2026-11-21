@@ -83,7 +83,9 @@ class _Connection:
             await self.socket.send_bytes(
                 str.encode(data_to_send + MESSAGE_DELIMITER)
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Any send failure means the connection is unusable.
+        # pylint: disable-next=broad-exception-caught
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.error("Error sending data: %s", exc)
             self.state = ConnectionState.ERROR
 
@@ -91,7 +93,9 @@ class _Connection:
         """Read data from socket."""
         try:
             data = await self.socket.read_bytes()
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Any read failure means the connection is unusable.
+        # pylint: disable-next=broad-exception-caught
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.error("Error receiving data: %s", exc)
             self.state = ConnectionState.ERROR
             return
@@ -160,10 +164,7 @@ class _Connection:
 
     def init_run(self) -> None:
         """Init the run sequence and store run task."""
-        # RUF006
-        # pylint: disable-next=line-too-long
-        # noqa keep reference via: https://stackoverflow.com/questions/71938799/python-asyncio-create-task-really-need-to-keep-a-reference
-        # even if we don't care
+        # Keep a reference so the task isn't garbage collected while running.
         task = self.loop.create_task(self.run())
 
         def remove_task(_task: asyncio.Task[None]) -> None:
@@ -193,8 +194,10 @@ class _Connection:
                         "Connected to Deako local integrations with %s",
                         self.format_name(),
                     )
+                # The run task must end through the CLOSED state, not
+                # with an exception nobody awaits.
                 # pylint: disable-next=broad-exception-caught
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     _LOGGER.error(
                         "Failed to connect %s because %s",
                         self.format_name(),
@@ -204,8 +207,10 @@ class _Connection:
             elif self.state == ConnectionState.CONNECTED:
                 try:
                     await self.read_socket()
+                # The run task must end through the CLOSED state, not
+                # with an exception nobody awaits.
                 # pylint: disable-next=broad-exception-caught
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     _LOGGER.error(
                         "Failed to read socket %s because %s",
                         self.format_name(),
@@ -216,8 +221,10 @@ class _Connection:
                 try:
                     self.close()
                     self.state = ConnectionState.CLOSED
+                # The run task must end through the CLOSED state, not
+                # with an exception nobody awaits.
                 # pylint: disable-next=broad-exception-caught
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     _LOGGER.error(
                         "Failed to close socket %s because %s",
                         self.format_name(),

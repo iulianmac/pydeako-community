@@ -3,9 +3,10 @@ Tests our functions to ensure the correct objects are generated.
 """
 from typing import Any
 from uuid import uuid4
+
 import pytest
 
-from . import device_ping_request, device_list_request, state_change_request
+from . import device_list_request, device_ping_request, state_change_request
 
 TRANSACTION_ID = "some_id"
 EXPECTED_BASE = {
@@ -65,7 +66,7 @@ def test_device_list_request_with_params():
 
 
 @pytest.mark.parametrize(
-    "test_input,expected_state",
+    ("test_input", "expected_state"),
     [
         (
             [DEVICE_UUID, False, None],

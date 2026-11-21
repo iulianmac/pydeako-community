@@ -12,15 +12,15 @@ from typing import Any
 
 from ..discover import DevicesNotFoundException
 from ..models import (
-    device_list_request,
-    device_ping_request,
-    state_change_request,
     ErrorCode,
     ResponseStatus,
     ResponseType,
+    device_list_request,
+    device_ping_request,
+    state_change_request,
 )
-from .utils import _Connection
 from ._request import _Request
+from .utils import _Connection
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -152,18 +152,12 @@ class _Manager:
 
     def create_connection_task(self) -> None:
         """Create an async task to initiate connection."""
-        # RUF006
-        # pylint: disable-next=line-too-long
-        # noqa keep reference via: https://stackoverflow.com/questions/71938799/python-asyncio-create-task-really-need-to-keep-a-reference
-        # even if we don't care
+        # Keep a reference so the task isn't garbage collected while running.
         task = asyncio.create_task(self._connect_in_background())
         self.tasks.add(task)
 
         def remove_task(_task: asyncio.Task[None]) -> None:
-            try:
-                self.tasks.remove(_task)
-            except KeyError:
-                pass  # already removed
+            self.tasks.discard(_task)  # close() may have cleared it already
 
         task.add_done_callback(remove_task)
 

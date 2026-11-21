@@ -5,8 +5,8 @@ pydeako module provides the following:
  - mdns discovery client
 """
 # pylint: disable=duplicate-code
-from .discover import DeakoDiscoverer, DevicesNotFoundException
 from .deako import Deako, FindDevicesError
+from .discover import DeakoDiscoverer, DevicesNotFoundException
 from .models import (
     RequestType,
     ResponseType,
@@ -16,9 +16,9 @@ from .models import (
 )
 
 __all__ = [
+    'Deako',
     'DeakoDiscoverer',
     'DevicesNotFoundException',
-    'Deako',
     'FindDevicesError',
     'RequestType',
     'ResponseType',

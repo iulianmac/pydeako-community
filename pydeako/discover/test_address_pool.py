@@ -3,9 +3,10 @@ Test the address pool used by discoverer.
 """
 
 from uuid import uuid4
+
 import pytest
 
-from ._address_pool import _AddressPool, EmptyAddressPool
+from ._address_pool import EmptyAddressPool, _AddressPool
 
 
 def test_init():

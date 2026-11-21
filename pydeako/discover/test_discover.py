@@ -1,13 +1,14 @@
 """
 Test the discovery client, patching the address pool and zeroconf lib.
 """
-from uuid import uuid4
 from unittest.mock import Mock, patch
+from uuid import uuid4
+
 import pytest
 from zeroconf import Zeroconf
 
+from ._address_pool import EmptyAddressPool, _AddressPool
 from ._discover import DeakoDiscoverer, DeakoListener, DevicesNotFoundException
-from ._address_pool import _AddressPool, EmptyAddressPool
 
 
 @patch("pydeako.discover._discover.ServiceBrowser.__init__")
@@ -214,7 +215,7 @@ def test_listener_update_service(mock_inet_ntoa):
 
 @patch("pydeako.discover._discover.ServiceBrowser.__init__", return_value=None)
 @pytest.mark.asyncio
-async def test_deako_discoverer_get_address_again(_service_browser_init):
+async def test_deako_discoverer_get_address_again(service_browser_init):
     """Test a second get_address, as on reconnect, finds the device again."""
     discoverer = DeakoDiscoverer(Mock(Zeroconf))
     discoverer.address_pool.add_address("10.0.0.2:23", "sw._deako._tcp.local.")
@@ -222,13 +223,14 @@ async def test_deako_discoverer_get_address_again(_service_browser_init):
     first = await discoverer.get_address()
     second = await discoverer.get_address()
 
+    service_browser_init.assert_called_once()
     assert first == second == ("10.0.0.2:23", "sw._deako._tcp.local.")
 
 
 @patch("pydeako.discover._discover.ServiceBrowser.__init__", return_value=None)
 @pytest.mark.asyncio
 async def test_deako_discoverer_get_address_removed_meanwhile(
-    _service_browser_init,
+    service_browser_init,
 ):
     """Test the pool emptying between the check and the read."""
     discoverer = DeakoDiscoverer(Mock(Zeroconf))
@@ -241,6 +243,9 @@ async def test_deako_discoverer_get_address_removed_meanwhile(
         pool.remove_service("sw")  # zeroconf thread removes it right after
         return count
 
-    with patch.object(pool, "available_addresses", count_then_remove):
-        with pytest.raises(DevicesNotFoundException):
-            await discoverer.get_address()
+    with (
+        patch.object(pool, "available_addresses", count_then_remove),
+        pytest.raises(DevicesNotFoundException),
+    ):
+        await discoverer.get_address()
+    service_browser_init.assert_called_once()

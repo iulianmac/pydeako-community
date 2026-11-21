@@ -2,8 +2,9 @@
 
 import json
 from typing import Any
-from uuid import uuid4
 from unittest.mock import ANY, Mock, patch
+from uuid import uuid4
+
 import pytest
 
 from ._deako import Deako, FindDevicesError
@@ -635,4 +636,5 @@ def test_incoming_json_logs_are_bounded(message, caplog):
     for record in caplog.records:
         text = record.getMessage()
         assert len(text) < 300
-        assert "\n" not in text and "\r" not in text
+        assert "\n" not in text
+        assert "\r" not in text

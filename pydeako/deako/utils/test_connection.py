@@ -1,11 +1,12 @@
 """Tests _Connection."""
 
 import json
+from unittest.mock import AsyncMock, Mock, call, patch
 from uuid import uuid4
-from unittest.mock import AsyncMock, call, Mock, patch
+
 import pytest
 
-from ._connection import _Connection, ConnectionState, UnknownStateException
+from ._connection import ConnectionState, UnknownStateException, _Connection
 from ._socket import _SocketConnection
 
 
@@ -325,7 +326,7 @@ def test_close(socket_connection_mock, asyncio_mock):
     task1 = Mock()
     task2 = Mock()
 
-    conn.tasks = set([task1, task2])
+    conn.tasks = {task1, task2}
 
     conn.close()
 
@@ -335,7 +336,7 @@ def test_close(socket_connection_mock, asyncio_mock):
 
 
 @pytest.mark.parametrize(
-    "state,expected",
+    ("state", "expected"),
     [
         (ConnectionState.CONNECTED, True),
         (ConnectionState.CLOSED, False),

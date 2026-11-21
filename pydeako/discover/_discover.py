@@ -2,14 +2,14 @@
 Deako device discovery via zeroconf.
 """
 
-from asyncio import sleep
-from collections.abc import Callable
 import logging
 import socket
+from asyncio import sleep
+from collections.abc import Callable
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
-from ._address_pool import _AddressPool, EmptyAddressPool
+from ._address_pool import EmptyAddressPool, _AddressPool
 
 DEAKO_TYPE = "_deako._tcp.local."
 TIMEOUT_S = 10
@@ -92,7 +92,12 @@ class DeakoListener(ServiceListener):
         if addresses:
             self.device_addresses_callback(name, addresses)
 
-    def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+    def remove_service(
+        self,
+        zc: Zeroconf,  # noqa: ARG002 (zeroconf's listener interface)
+        type_: str,
+        name: str,
+    ) -> None:
         """Remove addresses associated with service."""
         _LOGGER.debug(
             "Remove service with address type %s, name %s",

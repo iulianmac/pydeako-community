@@ -2,11 +2,12 @@
 Test the handler for socket connections.
 """
 
-from uuid import uuid4
 from unittest.mock import AsyncMock, Mock, patch
+from uuid import uuid4
+
 import pytest
 
-from ._socket import _SocketConnection, NoSocketException
+from ._socket import NoSocketException, _SocketConnection
 
 
 def test_init():

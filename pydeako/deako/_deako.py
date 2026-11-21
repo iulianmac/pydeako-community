@@ -1,6 +1,5 @@
 """Connection over socket."""
 import asyncio
-
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeGuard
@@ -128,7 +127,9 @@ class Deako:
                 self._handle_device_found(in_data["data"])
             elif in_data["type"] == ResponseType.EVENT:
                 self._handle_event(in_data["data"])
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        # A bad message must not reach the connection's read loop.
+        # pylint: disable-next=broad-exception-caught
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.error(
                 "Failed to parse a %s message: %s",
                 _short(in_data.get("type")),
@@ -238,7 +239,7 @@ class Deako:
         while len(self.devices) != self.expected_devices and remaining > 0:
             _LOGGER.debug(
                 "waiting for devices... expected: %i, received: "
-                + "%i, time remaining: %is",
+                "%i, time remaining: %is",
                 self.expected_devices,
                 len(self.devices),
                 remaining,
