@@ -51,22 +51,13 @@ strict = true
 
 [[tool.mypy.overrides]]
 # Test bodies are still type checked, but test functions need no annotations.
-module = [
-    "pydeako.deako.test_deako",
-    "pydeako.deako.test_manager",
-    "pydeako.deako.utils.test_connection",
-    "pydeako.deako.utils.test_socket",
-    "pydeako.discover.test_address_pool",
-    "pydeako.discover.test_discover",
-    "pydeako.models.test_request",
-    "pydeako.test_api",
-    "pydeako.test_integration",
-]
+module = ["tests.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
 filterwarnings = ["error"]
 
 [tool.ruff]

@@ -67,9 +67,11 @@ if __name__ == "__main__":
 
 ### Checks
 
-1. `pylint pydeako`
-2. `pycodestyle pydeako`
-3. `pytest pydeako`
+1. `ruff check pydeako tests`
+2. `pylint pydeako tests`
+3. `pycodestyle pydeako tests`
+4. `mypy pydeako tests`
+5. `pytest`
 
 ## License
 

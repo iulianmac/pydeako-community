@@ -8,10 +8,14 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from ..discover import DevicesNotFoundError
-from ..models import state_change_request
-from ._manager import CONNECTION_TIMEOUT_S, _is_device_busy, _Manager
-from ._request import _Request
+from pydeako.deako._manager import (
+    CONNECTION_TIMEOUT_S,
+    _is_device_busy,
+    _Manager,
+)
+from pydeako.deako._request import _Request
+from pydeako.discover import DevicesNotFoundError
+from pydeako.models import state_change_request
 
 
 def test_init():

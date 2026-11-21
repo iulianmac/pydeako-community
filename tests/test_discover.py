@@ -5,8 +5,12 @@ from uuid import uuid4
 import pytest
 from zeroconf import Zeroconf
 
-from ._address_pool import EmptyAddressPoolError, _AddressPool
-from ._discover import DeakoDiscoverer, DeakoListener, DevicesNotFoundError
+from pydeako.discover._address_pool import EmptyAddressPoolError, _AddressPool
+from pydeako.discover._discover import (
+    DeakoDiscoverer,
+    DeakoListener,
+    DevicesNotFoundError,
+)
 
 
 @patch("pydeako.discover._discover.ServiceBrowser.__init__")

@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from ._address_pool import EmptyAddressPoolError, _AddressPool
+from pydeako.discover._address_pool import EmptyAddressPoolError, _AddressPool
 
 
 def test_init():

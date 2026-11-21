@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from ._socket import NoSocketError, _SocketConnection
+from pydeako.deako.utils._socket import NoSocketError, _SocketConnection
 
 
 def test_init():

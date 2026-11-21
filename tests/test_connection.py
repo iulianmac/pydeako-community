@@ -6,8 +6,12 @@ from uuid import uuid4
 
 import pytest
 
-from ._connection import ConnectionState, UnknownStateError, _Connection
-from ._socket import _SocketConnection
+from pydeako.deako.utils._connection import (
+    ConnectionState,
+    UnknownStateError,
+    _Connection,
+)
+from pydeako.deako.utils._socket import _SocketConnection
 
 
 @patch("pydeako.deako.utils._connection.asyncio")

@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from ._deako import Deako, FindDevicesError
+from pydeako.deako._deako import Deako, FindDevicesError
 
 
 @patch("pydeako.deako._deako._Manager")

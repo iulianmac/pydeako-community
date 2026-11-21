@@ -4,7 +4,11 @@ from uuid import uuid4
 
 import pytest
 
-from . import device_list_request, device_ping_request, state_change_request
+from pydeako.models import (
+    device_list_request,
+    device_ping_request,
+    state_change_request,
+)
 
 TRANSACTION_ID = "some_id"
 EXPECTED_BASE = {
