@@ -334,3 +334,34 @@ async def test_bridge_closing_the_connection_does_not_block(
     assert ticks > 0
     assert not connection.is_connected()
     assert not connection.tasks
+
+
+@pytest.mark.asyncio
+async def test_reconnects_after_the_bridge_drops_the_connection(
+    bridge: FakeDeakoConnect, client: Deako, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test the client reconnects after a bridge reboot and works again."""
+    monkeypatch.setattr(_manager, "PING_WORKER_WAIT_S", 0.05)
+    monkeypatch.setattr(_manager, "RESPONSE_TIMEOUT_S", 0.05)
+    manager = client.connection_manager
+    # restart the ping worker so it uses the short interval
+    manager.close()
+    await client.connect()
+    connections_before = bridge.connections
+
+    bridge.drop_clients()
+    for _ in range(int(WAIT_S / 0.01)):
+        await asyncio.sleep(0.01)
+        if (
+            bridge.connections > connections_before
+            and manager.connection is not None
+            and manager.connection.is_connected()
+        ):
+            break
+
+    assert bridge.connections > connections_before
+    updated = asyncio.Event()
+    client.set_state_callback("uuid-2", updated.set)
+    await client.control_device("uuid-2", False)
+    await _wait_for(updated)
+    assert client.get_state("uuid-2") == {"power": False, "dim": None}
