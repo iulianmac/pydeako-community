@@ -24,11 +24,13 @@ def test_add():
     address, name = pool.get_address()
     assert address == address1
     assert name == name1
-    assert pool.available_addresses() == 0
+    # still known, so a reconnect can use it again
+    assert pool.available_addresses() == 1
+    assert pool.get_address() == (address1, name1)
 
 
-def test_multiple_add():
-    """Test _AddressPool.add_address multiple times."""
+def test_multiple_add_rotates():
+    """Test _AddressPool.get_address cycles through the addresses."""
     pool = _AddressPool()
     address1, name1 = str(uuid4()), str(uuid4())
     address2, name2 = str(uuid4()), str(uuid4())
@@ -37,16 +39,35 @@ def test_multiple_add():
     pool.add_address(address2, name2)
     assert pool.available_addresses() == 2
 
-    address, name = pool.get_address()
-    assert address == address2
-    assert name == name2
+    # newest first, then the others in turn
+    assert pool.get_address() == (address2, name2)
+    assert pool.get_address() == (address1, name1)
+    assert pool.get_address() == (address2, name2)
+    assert pool.available_addresses() == 2
 
-    address, name = pool.get_address()
-    assert address == address1
-    assert name == name1
 
-    with pytest.raises(EmptyAddressPool):
-        pool.get_address()
+def test_add_again_is_tried_next():
+    """Test re-announcing an address makes it the next one to try."""
+    pool = _AddressPool()
+    pool.add_address("10.0.0.1:23", "a")
+    pool.add_address("10.0.0.2:23", "b")
+    pool.add_address("10.0.0.1:23", "a")
+
+    assert pool.get_address() == ("10.0.0.1:23", "a")
+
+
+def test_remove_service():
+    """Test _AddressPool.remove_service drops all of a service's addresses."""
+    pool = _AddressPool()
+    pool.add_address("10.0.0.1:23", "a")
+    pool.add_address("10.0.0.3:23", "a")
+    pool.add_address("10.0.0.2:23", "b")
+
+    pool.remove_service("a")
+
+    assert pool.available_addresses() == 1
+    assert pool.get_address() == ("10.0.0.2:23", "b")
+    pool.remove_service("a")  # unknown name is ignored
 
 
 def test_get_empty_raises():
@@ -86,3 +107,18 @@ def test_remove_key_error_ignored():
     assert pool.available_addresses() == 0
 
     pool.remove_address(address)
+
+
+def test_set_service_replaces_its_addresses():
+    """Test _AddressPool.set_service swaps one service's addresses."""
+    pool = _AddressPool()
+    pool.add_address("10.0.0.1:23", "a")
+    pool.add_address("10.0.0.2:23", "b")
+
+    pool.set_service("a", ["10.0.0.9:23"])
+
+    assert pool.available_addresses() == 2
+    # the new address is tried next, the other service is untouched
+    assert pool.get_address() == ("10.0.0.9:23", "a")
+    assert pool.get_address() == ("10.0.0.2:23", "b")
+    assert pool.get_address() == ("10.0.0.9:23", "a")
