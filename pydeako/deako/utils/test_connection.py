@@ -217,6 +217,73 @@ def test_parse_data_partial(socket_connection_mock, asyncio_mock):
     )
 
 
+def _parsed(*chunks: bytes) -> list[object]:
+    """Feed chunks to a _Connection's parser and return what it delivered."""
+    delivered: list[object] = []
+    with patch("pydeako.deako.utils._connection.asyncio"), patch(
+        "pydeako.deako.utils._connection._SocketConnection",
+        spec=_SocketConnection,
+    ):
+        conn = _Connection("127.0.0.1:23", "dev", delivered.append)
+    for chunk in chunks:
+        conn.parse_data(chunk)
+    return delivered
+
+
+def test_parse_data_utf8_split_across_reads():
+    """Test a multi-byte character split between two reads."""
+    message = json.dumps({"name": "Café"}, ensure_ascii=False).encode()
+    cut = message.index("é".encode()) + 1
+
+    assert _parsed(message[:cut], message[cut:] + b"\r\n") == [
+        {"name": "Café"},
+    ]
+
+
+def test_parse_data_skips_invalid_line():
+    """Test a line that isn't JSON doesn't block later messages."""
+    assert _parsed(b"not json\r\n", b'{"a": 1}\r\n', b'{"b": 2}\r\n') == [
+        {"a": 1}, {"b": 2},
+    ]
+
+
+def test_parse_data_skips_invalid_object_line():
+    """Test a broken object on its own line doesn't block later messages."""
+    assert _parsed(b'{"a": }\r\n{"b": 2}\r\n') == [{"b": 2}]
+
+
+def test_parse_data_resyncs_on_indented_message():
+    """Test recovery when the next message starts after whitespace."""
+    assert _parsed(b'{"a": }\r\n  {"b": 2}\r\n\t{"c": 3}\r\n') == [
+        {"b": 2}, {"c": 3},
+    ]
+
+
+def test_parse_data_skips_non_objects():
+    """Test JSON that isn't an object is not delivered."""
+    assert _parsed(b'[1, 2]\r\n"text"\r\n7\r\n{"a": 1}\r\n') == [{"a": 1}]
+
+
+def test_parse_data_skips_unparsable_values():
+    """Test huge numbers and deep nesting don't break the connection."""
+    huge_number = b'{"a": ' + b"9" * 5000 + b"}\r\n"
+    deep = b'{"a": ' + b"[" * 100_000 + b"]" * 100_000 + b"}\r\n"
+
+    assert _parsed(huge_number, deep, b'{"b": 2}\r\n') == [{"b": 2}]
+
+
+def test_parse_data_back_to_back_messages():
+    """Test two objects in one read without a delimiter between them."""
+    assert _parsed(b'{"a": 1}{"b": 2}\r\n') == [{"a": 1}, {"b": 2}]
+
+
+def test_parse_data_drops_oversized_message():
+    """Test an endless message is dropped instead of growing forever."""
+    endless = [b'{"a": "' + b"x" * 2040] * 64  # 128 KiB, never closed
+
+    assert _parsed(*endless, b'"}\r\n{"b": 2}\r\n') == [{"b": 2}]
+
+
 @patch("pydeako.deako.utils._connection.asyncio")
 @patch(
     "pydeako.deako.utils._connection._SocketConnection",
