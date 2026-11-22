@@ -1,7 +1,8 @@
 """Helper for sending requests to local integrations."""
 
 import json
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 
@@ -11,11 +12,13 @@ class _Request:
     optional callback after successful send.
     """
 
-    body: dict
-    completed_callback: Callable | None = None
+    body: dict[str, Any]
+    completed_callback: Callable[[], None] | None = None
 
     def __init__(
-        self, body: dict, completed_callback: Callable | None = None
+        self,
+        body: dict[str, Any],
+        completed_callback: Callable[[], None] | None = None,
     ) -> None:
         """Initialize request with body and optional completed callback."""
         self.body = body
@@ -31,7 +34,8 @@ class _Request:
 
     def get_transaction_id(self) -> str | None:
         """Get the transaction id the device's response will carry."""
-        return self.body.get("transactionId")
+        transaction_id: str | None = self.body.get("transactionId")
+        return transaction_id
 
     def with_new_transaction_id(self) -> "_Request":
         """Copy this request with a new transaction id, to send it again."""
@@ -40,7 +44,7 @@ class _Request:
             self.completed_callback,
         )
 
-    def complete_callback(self):
+    def complete_callback(self) -> None:
         """Call the completed request callback if applicable."""
         if self.completed_callback is not None:
             self.completed_callback()

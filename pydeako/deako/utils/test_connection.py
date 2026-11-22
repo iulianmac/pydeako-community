@@ -2,8 +2,8 @@
 
 import json
 from uuid import uuid4
+from unittest.mock import AsyncMock, call, Mock, patch
 import pytest
-from mock import AsyncMock, call, Mock, patch
 
 from ._connection import _Connection, ConnectionState, UnknownStateException
 from ._socket import _SocketConnection

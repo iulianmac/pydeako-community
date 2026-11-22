@@ -4,9 +4,10 @@ Test the SocketConnection manager.
 
 import asyncio
 import json
-
+from collections.abc import Sequence
+from typing import Any
+from unittest.mock import AsyncMock, Mock, patch
 import pytest
-from mock import AsyncMock, Mock, patch
 
 from ..discover import DevicesNotFoundException
 from ..models import state_change_request
@@ -333,26 +334,30 @@ async def test_send_request_no_connection(
     connection_mock.send_data.assert_not_called()
 
 
-def _device_connection(manager, replies=(), log=None):
+def _device_connection(
+    manager: _Manager,
+    replies: Sequence[str | None] = (),
+    log: list[tuple[str, str]] | None = None,
+) -> tuple[AsyncMock, list[tuple[str, str]]]:
     """
     Mock connection that answers requests like a device. replies says how
     to answer each write in turn: "ok", "busy", "malformed" or None for no
     answer; writes past the end of replies are answered "ok".
     """
-    replies = list(replies)
-    log = [] if log is None else log
+    pending = list(replies)
+    writes: list[tuple[str, str]] = [] if log is None else log
 
-    def answer(response):
-        log.append(("response", response["transactionId"]))
+    def answer(response: dict[str, Any]) -> None:
+        writes.append(("response", response["transactionId"]))
         manager.incoming_json(response)
 
-    async def send_data(data):
+    async def send_data(data: str) -> None:
         body = json.loads(data)
-        log.append(("write", body["transactionId"]))
-        reply = replies.pop(0) if replies else "ok"
+        writes.append(("write", body["transactionId"]))
+        reply = pending.pop(0) if pending else "ok"
         if reply is None:
             return
-        response = {
+        response: dict[str, Any] = {
             "transactionId": body["transactionId"],
             "type": body["type"],
             "status": "ok",
@@ -365,10 +370,10 @@ def _device_connection(manager, replies=(), log=None):
 
     connection = AsyncMock()
     connection.send_data.side_effect = send_data
-    return connection, log
+    return connection, writes
 
 
-def _control_requests(count):
+def _control_requests(count: int) -> list[_Request]:
     """Build real state change requests for count devices."""
     return [
         _Request(state_change_request(f"uuid {i}", True, None))
@@ -419,16 +424,15 @@ async def test_send_request_no_response():
 async def test_send_request_retries_when_busy():
     """Test a request answered with DEVICE_BUSY is sent again"""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
-    manager.connection, log = _device_connection(
-        manager, replies=["busy", "ok"],
-    )
+    connection, log = _device_connection(manager, replies=["busy", "ok"])
+    manager.connection = connection
     request = _control_requests(1)[0]
 
     assert await manager.send_request(request)
 
     first, resent = (
         json.loads(call.args[0])
-        for call in manager.connection.send_data.call_args_list
+        for call in connection.send_data.call_args_list
     )
     first_id = first.pop("transactionId")
     resent_id = resent.pop("transactionId")
