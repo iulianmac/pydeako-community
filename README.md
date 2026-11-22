@@ -23,7 +23,7 @@ async def _discover():
     try:
         address = await d.get_address()
         print(f"Found deako device at {address}!")
-    except discover.DevicesNotFoundException:
+    except discover.DevicesNotFoundError:
         print("No devices found!")
         pass
 
@@ -67,9 +67,11 @@ if __name__ == "__main__":
 
 ### Checks
 
-1. `pylint pydeako`
-2. `pycodestyle pydeako`
-3. `pytest pydeako`
+1. `ruff check pydeako tests`
+2. `ruff format --check pydeako tests`
+3. `pylint pydeako tests`
+4. `mypy pydeako tests`
+5. `pytest`
 
 ## License
 

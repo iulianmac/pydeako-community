@@ -1,7 +1,8 @@
 """
-Manager to SocketConnection, ensuring that there's always an
-active connection. Uses two workers, one to check connectivity
-through pinging, and one to check for messages to send.
+Manage the connection to a Deako device and keep it alive.
+
+A worker pings the device and reconnects when no answer comes back.
+Requests are sent one at a time.
 """
 
 import asyncio
@@ -10,17 +11,17 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from ..discover import DevicesNotFoundException
+from ..discover import DevicesNotFoundError
 from ..models import (
-    device_list_request,
-    device_ping_request,
-    state_change_request,
     ErrorCode,
     ResponseStatus,
     ResponseType,
+    device_list_request,
+    device_ping_request,
+    state_change_request,
 )
-from .utils import _Connection
 from ._request import _Request
+from .utils import _Connection
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -28,7 +29,6 @@ CONNECTED_POLLING_INTERVAL_S = 1
 CONNECTION_TIMEOUT_S = 10
 # Wait before trying again after connecting failed unexpectedly.
 CONNECTION_RETRY_DELAY_S = 10
-WORKER_WAIT_S = 0.5
 PING_WORKER_WAIT_S = 10
 # Max time to wait for the device to answer a request before sending the next.
 RESPONSE_TIMEOUT_S = 1.0
@@ -53,7 +53,6 @@ class _ManagerState:
 
     connecting: bool = False
     canceled: bool = False
-    logged_send_error = False
 
 
 # pylint: disable-next=too-many-instance-attributes
@@ -61,7 +60,6 @@ class _Manager:
     """Manage the socket connection to Deako local integrations."""
 
     maintain_worker: asyncio.Task[None] | None = None
-    worker: asyncio.Task[None] | None = None
     connection: _Connection | None = None
     tasks: set[asyncio.Task[None]]
     client_name: str | None
@@ -100,11 +98,12 @@ class _Manager:
         """Connect to a discovered device; retry later if that fails."""
         try:
             address, name = await self.get_address()
-        except DevicesNotFoundException:
+        except DevicesNotFoundError:
             _LOGGER.warning("No devices to connect to")
             self.create_connection_task()
             return
         connection = _Connection(address, name, self.incoming_json)
+        connection.start()
         timeout = 0
         try:
             while (
@@ -140,9 +139,6 @@ class _Manager:
             task.cancel()
         self.tasks.clear()
 
-        if self.worker is not None:
-            self.worker.cancel()
-            self.worker = None
         if self.maintain_worker is not None:
             self.maintain_worker.cancel()
             self.maintain_worker = None
@@ -152,18 +148,12 @@ class _Manager:
 
     def create_connection_task(self) -> None:
         """Create an async task to initiate connection."""
-        # RUF006
-        # pylint: disable-next=line-too-long
-        # noqa keep reference via: https://stackoverflow.com/questions/71938799/python-asyncio-create-task-really-need-to-keep-a-reference
-        # even if we don't care
+        # Keep a reference so the task isn't garbage collected while running.
         task = asyncio.create_task(self._connect_in_background())
         self.tasks.add(task)
 
         def remove_task(_task: asyncio.Task[None]) -> None:
-            try:
-                self.tasks.remove(_task)
-            except KeyError:
-                pass  # already removed
+            self.tasks.discard(_task)  # close() may have cleared it already
 
         task.add_done_callback(remove_task)
 
@@ -236,23 +226,26 @@ class _Manager:
         uuid: str,
         power: bool,
         dim: int | None = None,
-        completed_callback: Callable[[], None] | None = None,
     ) -> None:
         """Send a state change request."""
         await self.send_request(
             _Request(
                 state_change_request(
-                    uuid, power, dim, source=self.client_name,
+                    uuid,
+                    power,
+                    dim,
+                    source=self.client_name,
                 ),
-                completed_callback=completed_callback,
-            )
+            ),
         )
 
     async def send_request(self, req: _Request) -> bool:
         """
-        Send a request. Requests go out one at a time: the next one is sent
-        once the device answers (or RESPONSE_TIMEOUT_S passes). Requests
-        answered with DEVICE_BUSY are retried.
+        Send a request and wait for the device to answer it.
+
+        Requests go out one at a time: the next one is sent once the device
+        answers (or RESPONSE_TIMEOUT_S passes). Requests answered with
+        DEVICE_BUSY are retried.
         """
         async with self.send_lock:
             for attempt in range(MAX_BUSY_RETRIES + 1):
@@ -271,7 +264,9 @@ class _Manager:
         return False
 
     async def _send_and_wait(
-        self, connection: _Connection, req: _Request,
+        self,
+        connection: _Connection,
+        req: _Request,
     ) -> dict[str, Any] | None:
         """Send a request and return its response, or None if none came."""
         transaction_id = req.get_transaction_id()

@@ -1,6 +1,4 @@
-"""
-Deako local integration constants.
-"""
+"""Deako local integration constants."""
 
 from enum import Enum
 

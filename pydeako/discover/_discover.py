@@ -1,15 +1,13 @@
-"""
-Deako device discovery via zeroconf.
-"""
+"""Deako device discovery via zeroconf."""
 
-from asyncio import sleep
-from collections.abc import Callable
 import logging
 import socket
+from asyncio import sleep
+from collections.abc import Callable
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
-from ._address_pool import _AddressPool, EmptyAddressPool
+from ._address_pool import EmptyAddressPoolError, _AddressPool
 
 DEAKO_TYPE = "_deako._tcp.local."
 TIMEOUT_S = 10
@@ -18,7 +16,7 @@ POLLING_INTERVAL_S = 0.5
 _LOGGER = logging.getLogger(__package__)
 
 
-class DevicesNotFoundException(Exception):
+class DevicesNotFoundError(Exception):
     """No devices found."""
 
     def __init__(
@@ -27,6 +25,10 @@ class DevicesNotFoundException(Exception):
         msg: str = f"No devices found via {DEAKO_TYPE}",
     ) -> None:
         super().__init__(msg, *args)
+
+
+# The name before 0.7, kept so existing imports keep working.
+DevicesNotFoundException = DevicesNotFoundError
 
 
 class DeakoDiscoverer(ServiceBrowser):
@@ -52,7 +54,8 @@ class DeakoDiscoverer(ServiceBrowser):
     async def get_address(self) -> tuple[str, str]:
         """
         Get an address from the pool of available addresses.
-        Times out after TIMEOUT_S.
+
+        Waits up to TIMEOUT_S for a device to be discovered.
         """
         total_time = 0.0
         while (
@@ -63,8 +66,8 @@ class DeakoDiscoverer(ServiceBrowser):
             await sleep(POLLING_INTERVAL_S)
         try:
             address, name = self.address_pool.get_address()
-        except EmptyAddressPool as exc:
-            raise DevicesNotFoundException() from exc
+        except EmptyAddressPoolError as exc:
+            raise DevicesNotFoundError() from exc
         _LOGGER.debug("Got address %s, with device name %s", address, name)
         return address, name
 
@@ -92,7 +95,12 @@ class DeakoListener(ServiceListener):
         if addresses:
             self.device_addresses_callback(name, addresses)
 
-    def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+    def remove_service(
+        self,
+        zc: Zeroconf,  # noqa: ARG002 (zeroconf's listener interface)
+        type_: str,
+        name: str,
+    ) -> None:
         """Remove addresses associated with service."""
         _LOGGER.debug(
             "Remove service with address type %s, name %s",
@@ -119,8 +127,9 @@ class DeakoListener(ServiceListener):
         self, zeroconf: Zeroconf, address_type: str, name: str
     ) -> list[str]:
         """
-        Get the service info for a specified address type and name.
-        Convert to local ips with port.
+        Get a service's addresses.
+
+        Returns each IPv4 address as host:port.
         """
         info = zeroconf.get_service_info(address_type, name)
         if info is not None:

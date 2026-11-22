@@ -1,22 +1,25 @@
-"""
-Test the SocketConnection manager.
-"""
+"""Test the SocketConnection manager."""
 
 import asyncio
 import json
 from collections.abc import Sequence
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
 
-from ..discover import DevicesNotFoundException
-from ..models import state_change_request
-from ._manager import _is_device_busy, _Manager, CONNECTION_TIMEOUT_S
-from ._request import _Request
+from pydeako.deako._manager import (
+    CONNECTION_TIMEOUT_S,
+    _is_device_busy,
+    _Manager,
+)
+from pydeako.deako._request import _Request
+from pydeako.discover import DevicesNotFoundError
+from pydeako.models import state_change_request
 
 
 def test_init():
-    """Test _Manager.__init__"""
+    """Test _Manager.__init__."""
     manager = _Manager(AsyncMock(), Mock())
 
     assert manager is not None
@@ -29,10 +32,7 @@ async def test_init_connection_already_started(
     asyncio_mock,
     create_connection_mock,
 ):
-    """
-    Test _Manager.init_connection when the connection
-    sequence has already been initiated.
-    """
+    """Test _Manager.init_connection while already connecting."""
     get_address = AsyncMock()
 
     manager = _Manager(get_address, Mock())
@@ -51,15 +51,16 @@ async def test_init_connection_get_address_no_devices(
     create_connection_mock,
 ):
     """
-    Test _Manager.init_connection with no devices found
-    which restarts the connection. If we have an address,
-    devices should be found.
+    Test _Manager.init_connection with no devices found.
+
+    It schedules another attempt; once there is an address, devices
+    should be found.
     """
     get_address = AsyncMock()
 
     manager = _Manager(get_address, Mock())
 
-    get_address.side_effect = DevicesNotFoundException()
+    get_address.side_effect = DevicesNotFoundError()
 
     await manager.init_connection()
 
@@ -100,7 +101,10 @@ async def test_init_connection_timeout_connecting(
     create_connection_mock.assert_called_once()  # this is the retry
 
 
-@patch("pydeako.deako._manager._Manager.maintain_connection_worker")
+@patch(
+    "pydeako.deako._manager._Manager.maintain_connection_worker",
+    new_callable=Mock,
+)
 @patch("pydeako.deako._manager._Connection")
 @patch("pydeako.deako._manager.asyncio", autospec=True)
 @pytest.mark.asyncio
@@ -109,7 +113,7 @@ async def test_init_connection(
     connection_mock,
     maintain_connection_worker_mock,
 ):
-    """Test _Manager.init_connection, success"""
+    """Test _Manager.init_connection, success."""
     address, name = Mock(), Mock()
     get_address = AsyncMock()
 
@@ -135,18 +139,15 @@ async def test_init_connection(
 
 def test_close():
     """Test _Manager.close."""
-    worker = Mock()
     maintain_worker = Mock()
     connection = Mock()
 
     manager = _Manager(AsyncMock(), Mock())
-    manager.worker = worker
     manager.maintain_worker = maintain_worker
     manager.connection = connection
 
     manager.close()
 
-    worker.cancel.assert_called_once()
     maintain_worker.cancel.assert_called_once()
     connection.close.assert_called_once()
 
@@ -179,10 +180,7 @@ def test_create_connection_task(connect_mock, asyncio_mock):
 async def test_maintain_connection_worker_canceled(
     asyncio_mock, create_connection_mock, close_mock
 ):
-    """
-    Test _Manager.maintain_connection_worker
-    doesn't proceed when canceled.
-    """
+    """Test _Manager.maintain_connection_worker stops when canceled."""
     manager = _Manager(AsyncMock(), Mock())
     manager.state.canceled = True
 
@@ -265,14 +263,14 @@ async def test_send_get_device_list(device_list_request_mock, request_mock):
     assert result is False
 
 
-@pytest.mark.parametrize("completed_callback", [None, "some_callback"])
 @patch("pydeako.deako._manager._Request")
 @patch("pydeako.deako._manager.state_change_request")
 @patch("pydeako.deako._manager._Manager.send_request")
 @pytest.mark.asyncio
 async def test_send_state_change(
-    send_request_mock, state_change_request_mock, request_mock,
-    completed_callback,
+    send_request_mock,
+    state_change_request_mock,
+    request_mock,
 ):
     """Test _Manager.send_state_change."""
     client_name = Mock()
@@ -285,13 +283,10 @@ async def test_send_state_change(
 
     manager = _Manager(AsyncMock(), Mock(), client_name=client_name)
 
-    await manager.send_state_change(
-        uuid, power, dim, completed_callback=completed_callback
-    )
+    await manager.send_state_change(uuid, power, dim)
 
     request_mock.assert_called_once_with(
         state_change_request_mock.return_value,
-        completed_callback=completed_callback,
     )
     state_change_request_mock.assert_called_once_with(
         uuid, power, dim, source=client_name
@@ -304,7 +299,7 @@ async def test_send_state_change(
 async def test_send_request(
     request_mock,
 ):
-    """Test _Manager.send_request with connection"""
+    """Test _Manager.send_request with connection."""
     client_name = Mock()
     connection_mock = AsyncMock()
 
@@ -325,7 +320,7 @@ async def test_send_request(
 async def test_send_request_no_connection(
     request_mock,
 ):
-    """Test _Manager.send_request without connection"""
+    """Test _Manager.send_request without connection."""
     client_name = Mock()
     connection_mock = AsyncMock()
 
@@ -344,9 +339,11 @@ def _device_connection(
     log: list[tuple[str, str]] | None = None,
 ) -> tuple[AsyncMock, list[tuple[str, str]]]:
     """
-    Mock connection that answers requests like a device. replies says how
-    to answer each write in turn: "ok", "busy", "malformed" or None for no
-    answer; writes past the end of replies are answered "ok".
+    Mock a connection that answers requests like a device.
+
+    replies says how to answer each write in turn: "ok", "busy",
+    "malformed" or None for no answer; writes past the end of replies are
+    answered "ok".
     """
     pending = list(replies)
     writes: list[tuple[str, str]] = [] if log is None else log
@@ -387,7 +384,7 @@ def _control_requests(count: int) -> list[_Request]:
 
 @pytest.mark.asyncio
 async def test_send_request_waits_for_response():
-    """Test concurrent requests are each sent after the previous response"""
+    """Test concurrent requests are each sent after the previous response."""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
     manager.connection, log = _device_connection(manager)
     requests = _control_requests(3)
@@ -408,10 +405,11 @@ async def test_send_request_waits_for_response():
 @patch("pydeako.deako._manager.RESPONSE_TIMEOUT_S", 0.05)
 @pytest.mark.asyncio
 async def test_send_request_no_response():
-    """Test requests the device doesn't answer don't block the next one"""
+    """Test requests the device doesn't answer don't block the next one."""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
     manager.connection, log = _device_connection(
-        manager, replies=[None, None],
+        manager,
+        replies=[None, None],
     )
 
     results = await asyncio.gather(
@@ -426,7 +424,7 @@ async def test_send_request_no_response():
 @patch("pydeako.deako._manager.BUSY_RETRY_DELAY_S", 0.01)
 @pytest.mark.asyncio
 async def test_send_request_retries_when_busy():
-    """Test a request answered with DEVICE_BUSY is sent again"""
+    """Test a request answered with DEVICE_BUSY is sent again."""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
     connection, log = _device_connection(manager, replies=["busy", "ok"])
     manager.connection = connection
@@ -455,10 +453,11 @@ async def test_send_request_retries_when_busy():
 @patch("pydeako.deako._manager.MAX_BUSY_RETRIES", 2)
 @pytest.mark.asyncio
 async def test_send_request_gives_up_when_busy():
-    """Test a request is given up after MAX_BUSY_RETRIES busy answers"""
+    """Test a request is given up after MAX_BUSY_RETRIES busy answers."""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
     manager.connection, log = _device_connection(
-        manager, replies=["busy", "busy", "busy", "ok"],
+        manager,
+        replies=["busy", "busy", "busy", "ok"],
     )
 
     assert not await manager.send_request(_control_requests(1)[0])
@@ -468,10 +467,11 @@ async def test_send_request_gives_up_when_busy():
 
 @pytest.mark.asyncio
 async def test_send_request_other_error_not_retried():
-    """Test a request answered with an error other than busy isn't resent"""
+    """Test a request answered with an error other than busy isn't resent."""
     manager = _Manager(AsyncMock(), Mock(), client_name=Mock())
     manager.connection, log = _device_connection(
-        manager, replies=["malformed"],
+        manager,
+        replies=["malformed"],
     )
 
     assert await manager.send_request(_control_requests(1)[0])
@@ -481,7 +481,7 @@ async def test_send_request_other_error_not_retried():
 
 @pytest.mark.asyncio
 async def test_incoming_json_resolves_pending_response():
-    """Test _Manager.incoming_json hands a response to its waiting request"""
+    """Test _Manager.incoming_json hands a response to its waiting request."""
     callback = Mock()
     manager = _Manager(AsyncMock(), callback, client_name=Mock())
     pending = asyncio.get_running_loop().create_future()
@@ -595,7 +595,8 @@ async def test_background_connect_error_retries(connection_mock, worker_mock):
 @patch("pydeako.deako._manager._Connection")
 @pytest.mark.asyncio
 async def test_reconnect_error_after_lost_connection_retries(
-    connection_mock, _send_request_mock,
+    connection_mock,
+    send_request_mock,
 ):
     """Test an unexpected error is also retried after a lost connection."""
     connection_mock.return_value.is_connected.return_value = True
@@ -612,6 +613,7 @@ async def test_reconnect_error_after_lost_connection_retries(
         if manager.connection is not None:
             break
 
+    send_request_mock.assert_awaited_once()  # the ping
     assert get_address.await_count == 2
     assert manager.connection is connection_mock.return_value
     manager.close()
@@ -623,17 +625,22 @@ async def test_reconnect_error_after_lost_connection_retries(
 @patch("pydeako.deako._manager.asyncio.sleep", new_callable=AsyncMock)
 @pytest.mark.asyncio
 async def test_init_connection_connected_at_deadline(
-    _sleep_mock, connection_mock, create_connection_mock, _worker_mock,
+    sleep_mock,
+    connection_mock,
+    create_connection_mock,
+    worker_mock,
 ):
     """Test a connection made in the last polling interval is kept."""
     polls = CONNECTION_TIMEOUT_S  # still connecting after every interval
-    connection_mock.return_value.is_connected.side_effect = (
-        [False] * polls + [True] * 5
-    )
+    connection_mock.return_value.is_connected.side_effect = [False] * polls + [
+        True
+    ] * 5
     manager = _Manager(AsyncMock(return_value=("1.2.3.4:23", "dev")), Mock())
 
     await manager.init_connection()
 
     connection_mock.return_value.close.assert_not_called()
     create_connection_mock.assert_not_called()
+    worker_mock.assert_called_once()
+    assert sleep_mock.await_count == CONNECTION_TIMEOUT_S
     assert manager.connection is connection_mock.return_value

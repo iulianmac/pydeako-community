@@ -29,10 +29,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements.txt -r requirements_test.txt
-      - run: pylint pydeako
-      - run: pycodestyle pydeako
-      - run: mypy pydeako
-      - run: pytest pydeako
+      - run: ruff check pydeako tests
+      - run: ruff format --check pydeako tests
+      - run: pylint pydeako tests
+      - run: mypy pydeako tests
+      - run: pytest
 
   build:
     name: Build distributions
@@ -46,6 +47,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
-      - run: pip install build==1.6.1 twine==7.0.0
+      - run: pip install --require-hashes -r requirements_release.txt
       - run: python -m build
       - run: twine check --strict dist/*
+      - name: Check the wheel ships no tests
+        run: |
+          if python -m zipfile -l dist/*.whl | grep -E '/test_[^/]*\.py'; then
+            exit 1
+          fi

@@ -1,6 +1,6 @@
 """Connection over socket."""
-import asyncio
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeGuard
@@ -98,7 +98,10 @@ class Deako:
         self.expected_devices = 0
 
     def update_state(
-        self, uuid: str, power: bool, dim: int | None = None,
+        self,
+        uuid: str,
+        power: bool,
+        dim: int | None = None,
     ) -> None:
         """Update an in memory device's state."""
         if uuid not in self.devices:
@@ -128,7 +131,9 @@ class Deako:
                 self._handle_device_found(in_data["data"])
             elif in_data["type"] == ResponseType.EVENT:
                 self._handle_event(in_data["data"])
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        # A bad message must not reach the connection's read loop.
+        # pylint: disable-next=broad-exception-caught
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.error(
                 "Failed to parse a %s message: %s",
                 _short(in_data.get("type")),
@@ -178,15 +183,20 @@ class Deako:
         state = _parse_state(data.get("state"))
         if not isinstance(target, str) or state is None:
             _LOGGER.error(
-                "Ignoring invalid state change for %s", _short(target),
+                "Ignoring invalid state change for %s",
+                _short(target),
             )
             return
         self.update_state(target, *state)
 
     # pylint: disable-next=too-many-arguments
     def record_device(
-        self, name: str, uuid: str, dimmable: bool,
-        power: bool, dim: int | None = None,
+        self,
+        name: str,
+        uuid: str,
+        dimmable: bool,
+        power: bool,
+        dim: int | None = None,
     ) -> None:
         """Store a device in local memory."""
         if uuid not in self.devices:
@@ -223,7 +233,8 @@ class Deako:
         # wait for device list
         while self.expected_devices == 0 and remaining > 0:
             _LOGGER.debug(
-                "waiting for device list... time remaining: %is", remaining,
+                "waiting for device list... time remaining: %is",
+                remaining,
             )
             await asyncio.sleep(DEVICE_LIST_POLLING_INTERVAL_S)
             remaining -= DEVICE_LIST_POLLING_INTERVAL_S
@@ -238,7 +249,7 @@ class Deako:
         while len(self.devices) != self.expected_devices and remaining > 0:
             _LOGGER.debug(
                 "waiting for devices... expected: %i, received: "
-                + "%i, time remaining: %is",
+                "%i, time remaining: %is",
                 self.expected_devices,
                 len(self.devices),
                 remaining,
@@ -255,16 +266,17 @@ class Deako:
             )
 
     async def control_device(
-        self, uuid: str, power: bool, dim: int | None = None
+        self,
+        uuid: str,
+        power: bool,
+        dim: int | None = None,
     ) -> None:
-        """Add control request to queue."""
+        """
+        Ask the device to change its state.
 
-        def completed_callback() -> None:
-            self.update_state(uuid, power, dim)
-
-        await self.connection_manager.send_state_change(
-            uuid, power, dim, completed_callback=completed_callback
-        )
+        The new state arrives later as an EVENT from the bridge.
+        """
+        await self.connection_manager.send_state_change(uuid, power, dim)
 
     def get_name(self, uuid: str) -> str | None:
         """Get a device's name by uuid."""

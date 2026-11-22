@@ -3,12 +3,17 @@
 import asyncio
 import json
 import logging
+from unittest.mock import AsyncMock, Mock, call, patch
 from uuid import uuid4
-from unittest.mock import AsyncMock, call, Mock, patch
+
 import pytest
 
-from ._connection import _Connection, ConnectionState, UnknownStateException
-from ._socket import _SocketConnection
+from pydeako.deako.utils._connection import (
+    ConnectionState,
+    UnknownStateError,
+    _Connection,
+)
+from pydeako.deako.utils._socket import _SocketConnection
 
 
 @patch("pydeako.deako.utils._connection.asyncio")
@@ -16,9 +21,8 @@ from ._socket import _SocketConnection
     "pydeako.deako.utils._connection._SocketConnection",
     spec=_SocketConnection,
 )
-@patch("pydeako.deako.utils._connection._Connection.init_run")
-def test_init(init_run_mock, socket_connection_mock, asyncio_mock):
-    """Test _Connection.__init__"""
+def test_init(socket_connection_mock, asyncio_mock):
+    """Test _Connection.__init__."""
     address, name = Mock(), Mock()
     loop_mock = AsyncMock()
     asyncio_mock.get_running_loop.return_value = loop_mock
@@ -30,7 +34,9 @@ def test_init(init_run_mock, socket_connection_mock, asyncio_mock):
     assert conn is not None
     asyncio_mock.get_running_loop.assert_called_once()
     assert conn.state == ConnectionState.NOT_STARTED
-    init_run_mock.assert_called_once()
+    # nothing runs until start()
+    loop_mock.create_task.assert_not_called()
+    assert not conn.tasks
 
 
 @pytest.mark.parametrize("raise_error", [True, False])
@@ -196,8 +202,8 @@ def test_parse_data_partial(socket_connection_mock, asyncio_mock):
     items = str.encode(
         "\r\n".join(
             [
-                json_message_data[0: len(json_message_data) // 2],
-                json_message_data[len(json_message_data) // 2:],
+                json_message_data[0 : len(json_message_data) // 2],
+                json_message_data[len(json_message_data) // 2 :],
             ]
         )
     )
@@ -222,9 +228,12 @@ def test_parse_data_partial(socket_connection_mock, asyncio_mock):
 def _parsed(*chunks: bytes) -> list[object]:
     """Feed chunks to a _Connection's parser and return what it delivered."""
     delivered: list[object] = []
-    with patch("pydeako.deako.utils._connection.asyncio"), patch(
-        "pydeako.deako.utils._connection._SocketConnection",
-        spec=_SocketConnection,
+    with (
+        patch("pydeako.deako.utils._connection.asyncio"),
+        patch(
+            "pydeako.deako.utils._connection._SocketConnection",
+            spec=_SocketConnection,
+        ),
     ):
         conn = _Connection("127.0.0.1:23", "dev", delivered.append)
     for chunk in chunks:
@@ -245,7 +254,8 @@ def test_parse_data_utf8_split_across_reads():
 def test_parse_data_skips_invalid_line():
     """Test a line that isn't JSON doesn't block later messages."""
     assert _parsed(b"not json\r\n", b'{"a": 1}\r\n', b'{"b": 2}\r\n') == [
-        {"a": 1}, {"b": 2},
+        {"a": 1},
+        {"b": 2},
     ]
 
 
@@ -257,7 +267,8 @@ def test_parse_data_skips_invalid_object_line():
 def test_parse_data_resyncs_on_indented_message():
     """Test recovery when the next message starts after whitespace."""
     assert _parsed(b'{"a": }\r\n  {"b": 2}\r\n\t{"c": 3}\r\n') == [
-        {"b": 2}, {"c": 3},
+        {"b": 2},
+        {"c": 3},
     ]
 
 
@@ -322,9 +333,9 @@ def test_parse_data_warns_once_about_bad_input(caplog):
     "pydeako.deako.utils._connection._SocketConnection",
     spec=_SocketConnection,
 )
-@patch("pydeako.deako.utils._connection._Connection.run")
-def test_init_run(run_mock, socket_connection_mock, asyncio_mock):
-    """Test _Connection.__init__"""
+@patch("pydeako.deako.utils._connection._Connection.run", new_callable=Mock)
+def test_start(run_mock, socket_connection_mock, asyncio_mock):
+    """Test _Connection.__init__."""
     address, name = Mock(), Mock()
     loop_mock = Mock()
     task_mock = Mock()
@@ -333,10 +344,12 @@ def test_init_run(run_mock, socket_connection_mock, asyncio_mock):
     loop_mock.create_task.return_value = task_mock
 
     conn = _Connection(address, name, Mock())
+    conn.start()
 
     socket_connection_mock.assert_called_once_with(address, loop_mock)
 
     run_mock.assert_called_once()
+    loop_mock.create_task.assert_called_once_with(run_mock.return_value)
     task_mock.add_done_callback.assert_called_once()
     assert task_mock in conn.tasks
 
@@ -358,7 +371,7 @@ def test_close(socket_connection_mock, asyncio_mock):
     task1 = Mock()
     task2 = Mock()
 
-    conn.tasks = set([task1, task2])
+    conn.tasks = {task1, task2}
 
     conn.close()
 
@@ -368,7 +381,7 @@ def test_close(socket_connection_mock, asyncio_mock):
 
 
 @pytest.mark.parametrize(
-    "state,expected",
+    ("state", "expected"),
     [
         (ConnectionState.CONNECTED, True),
         (ConnectionState.CLOSED, False),
@@ -452,17 +465,13 @@ async def test_state_machine_read_failure(
 @patch(
     "pydeako.deako.utils._connection._SocketConnection", spec=_SocketConnection
 )
-@patch("pydeako.deako.utils._connection._Connection.init_run")
 @pytest.mark.asyncio
-async def test_state_machine_yields_between_reads(
-    _init_run_mock, socket_connection_mock
-):
+async def test_state_machine_yields_between_reads(socket_connection_mock):
     """Test other tasks get a turn while the device keeps sending."""
     reads = 5
+    data = [b'{"a": 1}\r\n'] * reads + [b""]
     # like sock_recv with data waiting, these reads return without suspending
-    socket_connection_mock.return_value.read_bytes.side_effect = (
-        [b'{"a": 1}\r\n'] * reads + [b""]
-    )
+    socket_connection_mock.return_value.read_bytes.side_effect = data
     conn = _Connection("1.2.3.4:23", "dev", Mock())
     conn.state = ConnectionState.CONNECTED
     turns = 0
@@ -546,5 +555,5 @@ async def test_state_machine_unknown_state_raises(
 
     socket_connection_mock.assert_called_once_with(address, loop_mock)
 
-    with pytest.raises(UnknownStateException):
+    with pytest.raises(UnknownStateError):
         await conn.run()

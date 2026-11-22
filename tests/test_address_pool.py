@@ -1,11 +1,10 @@
-"""
-Test the address pool used by discoverer.
-"""
+"""Test the address pool used by discoverer."""
 
 from uuid import uuid4
+
 import pytest
 
-from ._address_pool import _AddressPool, EmptyAddressPool
+from pydeako.discover._address_pool import EmptyAddressPoolError, _AddressPool
 
 
 def test_init():
@@ -74,7 +73,7 @@ def test_get_empty_raises():
     """Test _AddressPool.get_address raises EmptyAddresspool when empty."""
     pool = _AddressPool()
 
-    with pytest.raises(EmptyAddressPool):
+    with pytest.raises(EmptyAddressPoolError):
         pool.get_address()
 
 
@@ -90,7 +89,7 @@ def test_removed():
 
     assert pool.available_addresses() == 0
 
-    with pytest.raises(EmptyAddressPool):
+    with pytest.raises(EmptyAddressPoolError):
         pool.get_address()
 
 

@@ -51,18 +51,48 @@ strict = true
 
 [[tool.mypy.overrides]]
 # Test bodies are still type checked, but test functions need no annotations.
-module = [
-    "pydeako.deako.test_deako",
-    "pydeako.deako.test_manager",
-    "pydeako.deako.utils.test_connection",
-    "pydeako.deako.utils.test_socket",
-    "pydeako.discover.test_address_pool",
-    "pydeako.discover.test_discover",
-    "pydeako.models.test_request",
-    "pydeako.test_integration",
-]
+module = ["tests.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 79
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "A",      # flake8-builtins
+    "ARG",    # flake8-unused-arguments
+    "ASYNC",  # flake8-async
+    "B",      # flake8-bugbear
+    "BLE",    # flake8-blind-except
+    "C4",     # flake8-comprehensions
+    "D",      # pydocstyle (PEP 257)
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "G",      # flake8-logging-format
+    "I",      # isort
+    "LOG",    # flake8-logging
+    "N",      # pep8-naming
+    "PERF",   # perflint
+    "PIE",    # flake8-pie
+    "PL",     # pylint
+    "PT",     # flake8-pytest-style
+    "RET",    # flake8-return
+    "RUF",    # ruff
+    "SIM",    # flake8-simplify
+    "UP",     # pyupgrade
+    "W",      # pycodestyle warnings
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use literal values and take mock arguments they don't read.
+"**/test_*.py" = ["ARG", "PLR2004"]

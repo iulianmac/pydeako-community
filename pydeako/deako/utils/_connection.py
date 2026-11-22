@@ -1,6 +1,4 @@
-"""
-Class that manages a socket connection to a deako device.
-"""
+"""Class that manages a socket connection to a deako device."""
 
 import asyncio
 import codecs
@@ -26,7 +24,7 @@ _JSON_DECODER = json.JSONDecoder()
 _NEXT_MESSAGE = re.compile(r"\n[ \t\r]*\{")
 
 
-class UnknownStateException(Exception):
+class UnknownStateError(Exception):
     """Unknown state."""
 
 
@@ -42,8 +40,9 @@ class ConnectionState(Enum):
 
 class _Connection:
     """
-    Representation of a local socket connection to a Deako device.
-    Continuously reads socket for messages async.
+    Local socket connection to a Deako device.
+
+    A task keeps reading the socket and hands each message to a callback.
     """
 
     # pylint: disable=too-many-instance-attributes
@@ -62,7 +61,7 @@ class _Connection:
         name: str,
         on_data_callback: Callable[[dict[str, Any]], None],
     ) -> None:
-        """Setup and start a socket connection."""
+        """Set up a socket connection; start() connects and reads."""
         self.address = address
         self.name = name
         self.loop = asyncio.get_running_loop()
@@ -76,7 +75,6 @@ class _Connection:
         self.bad_input_logged = False
         self.socket = _SocketConnection(address, self.loop)
         self.tasks = set()
-        self.init_run()
 
     async def send_data(self, data_to_send: str) -> None:
         """Send data to socket."""
@@ -85,7 +83,9 @@ class _Connection:
             await self.socket.send_bytes(
                 str.encode(data_to_send + MESSAGE_DELIMITER)
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Any send failure means the connection is unusable.
+        # pylint: disable-next=broad-exception-caught
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.error("Error sending data: %s", exc)
             self.state = ConnectionState.ERROR
 
@@ -93,7 +93,9 @@ class _Connection:
         """Read data from socket."""
         try:
             data = await self.socket.read_bytes()
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Any read failure means the connection is unusable.
+        # pylint: disable-next=broad-exception-caught
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.error("Error receiving data: %s", exc)
             self.state = ConnectionState.ERROR
             return
@@ -117,13 +119,15 @@ class _Connection:
         """
         text = self.utf8_decoder.decode(data)
         _LOGGER.debug(
-            "[%s] Raw message received: %r", self.format_name(), text,
+            "[%s] Raw message received: %r",
+            self.format_name(),
+            text,
         )
         if self.skipping_line:
             line_end = text.find("\n")
             if line_end == -1:
                 return
-            text = text[line_end + 1:]
+            text = text[line_end + 1 :]
             self.skipping_line = False
 
         buffer = self.message_buffer + text
@@ -135,16 +139,18 @@ class _Connection:
                 if next_message is None:
                     break  # incomplete, wait for more data
                 self._log_bad_input(
-                    "Skipping invalid message from %s", self.format_name(),
+                    "Skipping invalid message from %s",
+                    self.format_name(),
                 )
-                buffer = buffer[next_message.start() + 1:]
+                buffer = buffer[next_message.start() + 1 :]
                 continue
             buffer = buffer[end:]
             if isinstance(message, dict):
                 self.on_data_callback(message)
             else:
                 self._log_bad_input(
-                    "Skipping non-object message from %s", self.format_name(),
+                    "Skipping non-object message from %s",
+                    self.format_name(),
                 )
 
         if len(buffer) > MAX_MESSAGE_LENGTH:
@@ -155,7 +161,7 @@ class _Connection:
             )
             # Keep what follows the last complete line, unless that part is
             # itself too long; then skip until the current line ends.
-            rest = buffer[buffer.rfind("\n") + 1:]
+            rest = buffer[buffer.rfind("\n") + 1 :]
             self.skipping_line = len(rest) > MAX_MESSAGE_LENGTH
             buffer = "" if self.skipping_line else rest
         self.message_buffer = buffer
@@ -166,12 +172,9 @@ class _Connection:
         self.bad_input_logged = True
         _LOGGER.log(level, message, *args)
 
-    def init_run(self) -> None:
-        """Init the run sequence and store run task."""
-        # RUF006
-        # pylint: disable-next=line-too-long
-        # noqa keep reference via: https://stackoverflow.com/questions/71938799/python-asyncio-create-task-really-need-to-keep-a-reference
-        # even if we don't care
+    def start(self) -> None:
+        """Start the task that connects and reads messages."""
+        # Keep a reference so the task isn't garbage collected while running.
         task = self.loop.create_task(self.run())
 
         def remove_task(_task: asyncio.Task[None]) -> None:
@@ -201,8 +204,10 @@ class _Connection:
                         "Connected to Deako local integrations with %s",
                         self.format_name(),
                     )
+                # The run task must end through the CLOSED state, not
+                # with an exception nobody awaits.
                 # pylint: disable-next=broad-exception-caught
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     _LOGGER.error(
                         "Failed to connect %s because %s",
                         self.format_name(),
@@ -215,8 +220,10 @@ class _Connection:
                     # A read returns without suspending while data is
                     # waiting, so let other tasks run between reads.
                     await asyncio.sleep(0)
+                # The run task must end through the CLOSED state, not
+                # with an exception nobody awaits.
                 # pylint: disable-next=broad-exception-caught
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     _LOGGER.error(
                         "Failed to read socket %s because %s",
                         self.format_name(),
@@ -227,8 +234,10 @@ class _Connection:
                 try:
                     self.close()
                     self.state = ConnectionState.CLOSED
+                # The run task must end through the CLOSED state, not
+                # with an exception nobody awaits.
                 # pylint: disable-next=broad-exception-caught
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     _LOGGER.error(
                         "Failed to close socket %s because %s",
                         self.format_name(),
@@ -240,7 +249,7 @@ class _Connection:
                 break
             else:
                 _LOGGER.error("Unknown state: %s", self.state)
-                raise UnknownStateException(f"Unknown state: {self.state}")
+                raise UnknownStateError(f"Unknown state: {self.state}")
 
     def format_name(self) -> str:
         """Format name."""

@@ -1,13 +1,17 @@
-"""
-Test the discovery client, patching the address pool and zeroconf lib.
-"""
-from uuid import uuid4
+"""Test the discovery client, patching the address pool and zeroconf lib."""
+
 from unittest.mock import Mock, patch
+from uuid import uuid4
+
 import pytest
 from zeroconf import Zeroconf
 
-from ._discover import DeakoDiscoverer, DeakoListener, DevicesNotFoundException
-from ._address_pool import _AddressPool, EmptyAddressPool
+from pydeako.discover._address_pool import EmptyAddressPoolError, _AddressPool
+from pydeako.discover._discover import (
+    DeakoDiscoverer,
+    DeakoListener,
+    DevicesNotFoundError,
+)
 
 
 @patch("pydeako.discover._discover.ServiceBrowser.__init__")
@@ -16,7 +20,7 @@ from ._address_pool import _AddressPool, EmptyAddressPool
 def test_deako_discoverer_init(
     mock_address_pool, mock_deako_listener, mock_service_browser_init
 ):
-    """Test init of Discoverer.__init__"""
+    """Test init of Discoverer.__init__."""
     zc_mock = Mock(Zeroconf)
 
     deako_discoverer = DeakoDiscoverer(zc_mock)
@@ -43,8 +47,7 @@ def test_deako_discoverer_init(
 def test_deako_discoverer_init_no_zc(
     mock_address_pool, mock_deako_listener, mock_service_browser_init, mock_zc
 ):
-    """Test init of Discoverer.__init__ with no zc passed in"""
-
+    """Test init of Discoverer.__init__ with no zc passed in."""
     deako_discoverer = DeakoDiscoverer()
 
     assert deako_discoverer is not None
@@ -98,22 +101,19 @@ async def test_deako_discoverer_get_address_success(
 async def test_deako_discoverer_get_address_timeout(
     mock_address_pool, mock_deako_listener, mock_service_browser_init
 ):  # pylint: disable=unused-argument
-    """
-    Test Discoverer.get_address times out and
-    throws DevicesNotFoundException.
-    """
+    """Test Discoverer.get_address times out with DevicesNotFoundError."""
     # use instance as the mock as this is what will be called
     mock_address_pool = mock_address_pool.return_value
     zc_mock = Mock(Zeroconf)
 
     mock_address_pool.available_addresses.return_value = 0
-    mock_address_pool.get_address.side_effect = EmptyAddressPool()
+    mock_address_pool.get_address.side_effect = EmptyAddressPoolError()
 
     deako_discoverer = DeakoDiscoverer(zc_mock)
 
     assert deako_discoverer is not None
 
-    with pytest.raises(DevicesNotFoundException):
+    with pytest.raises(DevicesNotFoundError):
         await deako_discoverer.get_address()
 
 
@@ -155,7 +155,8 @@ def test_listener_add_service(mock_inet_ntoa):
     mock_inet_ntoa.assert_called_with(address)
     zc_mock.get_service_info.assert_called_with(_type, name)
     add_callback.assert_called_once_with(
-        name, [f"{converted_address}:{port}"],
+        name,
+        [f"{converted_address}:{port}"],
     )
     remove_callback.assert_not_called()
 
@@ -207,14 +208,15 @@ def test_listener_update_service(mock_inet_ntoa):
     zc_mock.get_service_info.assert_called_with(_type, name)
     # one call that swaps the addresses, so the pool is never empty between
     add_callback.assert_called_once_with(
-        name, [f"{converted_address}:{port}"],
+        name,
+        [f"{converted_address}:{port}"],
     )
     remove_callback.assert_not_called()
 
 
 @patch("pydeako.discover._discover.ServiceBrowser.__init__", return_value=None)
 @pytest.mark.asyncio
-async def test_deako_discoverer_get_address_again(_service_browser_init):
+async def test_deako_discoverer_get_address_again(service_browser_init):
     """Test a second get_address, as on reconnect, finds the device again."""
     discoverer = DeakoDiscoverer(Mock(Zeroconf))
     discoverer.address_pool.add_address("10.0.0.2:23", "sw._deako._tcp.local.")
@@ -222,13 +224,14 @@ async def test_deako_discoverer_get_address_again(_service_browser_init):
     first = await discoverer.get_address()
     second = await discoverer.get_address()
 
+    service_browser_init.assert_called_once()
     assert first == second == ("10.0.0.2:23", "sw._deako._tcp.local.")
 
 
 @patch("pydeako.discover._discover.ServiceBrowser.__init__", return_value=None)
 @pytest.mark.asyncio
 async def test_deako_discoverer_get_address_removed_meanwhile(
-    _service_browser_init,
+    service_browser_init,
 ):
     """Test the pool emptying between the check and the read."""
     discoverer = DeakoDiscoverer(Mock(Zeroconf))
@@ -241,6 +244,9 @@ async def test_deako_discoverer_get_address_removed_meanwhile(
         pool.remove_service("sw")  # zeroconf thread removes it right after
         return count
 
-    with patch.object(pool, "available_addresses", count_then_remove):
-        with pytest.raises(DevicesNotFoundException):
-            await discoverer.get_address()
+    with (
+        patch.object(pool, "available_addresses", count_then_remove),
+        pytest.raises(DevicesNotFoundError),
+    ):
+        await discoverer.get_address()
+    service_browser_init.assert_called_once()

@@ -1,12 +1,11 @@
-"""
-Test the handler for socket connections.
-"""
+"""Test the handler for socket connections."""
 
-from uuid import uuid4
 from unittest.mock import AsyncMock, Mock, patch
+from uuid import uuid4
+
 import pytest
 
-from ._socket import _SocketConnection, NoSocketException
+from pydeako.deako.utils._socket import NoSocketError, _SocketConnection
 
 
 def test_init():
@@ -45,10 +44,7 @@ async def test_connect_socket(socket_mock):
 
 
 def test_close_socket_no_socket():
-    """
-    Test _SocketConnection.close_socket when
-    the socket hasn't been created.
-    """
+    """Test _SocketConnection.close_socket without a socket."""
     loop_mock = AsyncMock()
 
     socket_connection = _SocketConnection(Mock(), loop_mock)
@@ -72,15 +68,12 @@ def test_close_socket():
 
 @pytest.mark.asyncio
 async def test_send_bytes_no_socket():
-    """
-    Test _SocketConnection.send_bytes when
-    the socket hasn't been created.
-    """
+    """Test _SocketConnection.send_bytes without a socket."""
     loop_mock = AsyncMock()
 
     socket_connection = _SocketConnection(Mock(), loop_mock)
 
-    with pytest.raises(NoSocketException):
+    with pytest.raises(NoSocketError):
         await socket_connection.send_bytes(bytes([]))
 
 
@@ -101,15 +94,12 @@ async def test_send_bytes():
 
 @pytest.mark.asyncio
 async def test_read_bytes_no_socket():
-    """
-    Test _SocketConnection.read_bytes when
-    the socket hasn't been created.
-    """
+    """Test _SocketConnection.read_bytes without a socket."""
     loop_mock = AsyncMock()
 
     socket_connection = _SocketConnection(Mock(), loop_mock)
 
-    with pytest.raises(NoSocketException):
+    with pytest.raises(NoSocketError):
         await socket_connection.read_bytes()
 
 

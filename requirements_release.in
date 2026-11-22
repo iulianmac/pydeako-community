@@ -1,0 +1,8 @@
+# Tools for building and publishing; locked with hashes in
+# requirements_release.txt by:
+#   uv pip compile --generate-hashes --python-version 3.14 \
+#     --python-platform linux --exclude-newer <7 days ago> \
+#     requirements_release.in -o requirements_release.txt
+# (the 7-day cooldown matches Dependabot's)
+build==1.6.1
+twine==7.0.0

@@ -3,6 +3,6 @@
 from ._deako import Deako, FindDevicesError
 
 __all__ = [
-    'Deako',
-    'FindDevicesError',
+    "Deako",
+    "FindDevicesError",
 ]
