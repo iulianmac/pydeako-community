@@ -1,0 +1,16 @@
+name: Feature request
+description: Something the library should support but doesn't.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you need
+      description: What you want to do with your Deako devices, and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
+      description: Optional. An API you have in mind, or how the Deako app or local API does it.

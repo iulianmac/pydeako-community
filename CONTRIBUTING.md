@@ -1,6 +1,6 @@
 # Contributing
 
-Bug reports and pull requests are welcome. For a bug in the Home Assistant Deako integration itself (setup, entities, UI), use [Home Assistant Core](https://github.com/home-assistant/core/issues).
+Bug reports and pull requests are welcome. Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). For a bug in the Home Assistant Deako integration itself (setup, entities, UI), use [Home Assistant Core](https://github.com/home-assistant/core/issues).
 
 ## Setup
 
