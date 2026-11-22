@@ -467,3 +467,172 @@ async def test_get_dimmable(device_exists, dimmable):
         assert is_dimmable == dimmable
     else:
         assert is_dimmable is None
+
+
+def test_update_state_dim_zero():
+    """Test a dim of 0 is stored, not mistaken for 'no dim'."""
+    deako = Deako(Mock())
+    deako.record_device("Lamp", "uuid", True, True, 40)
+
+    deako.update_state("uuid", True, 0)
+
+    assert deako.get_state("uuid") == {"power": True, "dim": 0}
+
+
+def test_update_state_without_dim_keeps_dim():
+    """Test an event without dim keeps the last known dim."""
+    deako = Deako(Mock())
+    deako.record_device("Lamp", "uuid", True, True, 40)
+
+    deako.update_state("uuid", False)
+
+    assert deako.get_state("uuid") == {"power": False, "dim": 40}
+
+
+@pytest.mark.parametrize("count", ["5", -1, True, 1.5, 10**9, None])
+def test_incoming_json_device_list_invalid_count(count):
+    """Test a device count that isn't a sensible integer is ignored."""
+    deako = Deako(Mock())
+
+    deako.incoming_json(
+        {"type": "DEVICE_LIST", "data": {"number_of_devices": count}},
+    )
+
+    assert deako.expected_devices == 0
+
+
+@patch("pydeako.deako._deako.DEVICE_LIST_POLLING_INTERVAL_S", 0.01)
+@pytest.mark.asyncio
+async def test_find_devices_invalid_count_raises_find_devices_error():
+    """Test an invalid device count ends in FindDevicesError."""
+    deako = Deako(Mock())
+    manager = Mock()
+
+    async def send_get_device_list() -> bool:
+        deako.incoming_json(
+            {"type": "DEVICE_LIST", "data": {"number_of_devices": "5"}},
+        )
+        return True
+
+    manager.send_get_device_list = send_get_device_list
+    deako.connection_manager = manager
+
+    with pytest.raises(FindDevicesError):
+        await deako.find_devices(timeout=0.05)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"name": 1, "uuid": "u", "state": {"power": True}},
+        {"name": "Lamp", "uuid": None, "state": {"power": True}},
+        {"name": "Lamp", "uuid": "u", "state": {"power": "on"}},
+        {"name": "Lamp", "uuid": "u", "state": {"power": 2}},
+        {"name": "Lamp", "uuid": "u", "state": "on"},
+        {"name": "Lamp", "uuid": "u", "capabilities": 3,
+         "state": {"power": True}},
+    ],
+)
+def test_incoming_json_device_found_invalid(data):
+    """Test a device with invalid fields isn't recorded."""
+    deako = Deako(Mock())
+
+    deako.incoming_json({"type": "DEVICE_FOUND", "data": data})
+
+    assert not deako.get_devices()
+
+
+@pytest.mark.parametrize("state", [{"power": "on"}, {"dim": 5}, "on"])
+def test_incoming_json_event_invalid_state(state):
+    """Test an event with an invalid state doesn't change the device."""
+    deako = Deako(Mock())
+    deako.record_device("Lamp", "u", True, False, 40)
+
+    deako.incoming_json(
+        {"type": "EVENT", "data": {"target": "u", "state": state}},
+    )
+
+    assert deako.get_state("u") == {"power": False, "dim": 40}
+
+
+@patch("pydeako.deako._deako.MAX_DEVICES", 3)
+def test_incoming_json_device_found_capped():
+    """Test devices beyond the limit aren't recorded."""
+    deako = Deako(Mock())
+
+    for i in range(5):
+        deako.incoming_json({
+            "type": "DEVICE_FOUND",
+            "data": {"name": "Lamp", "uuid": f"u{i}",
+                     "state": {"power": True}},
+        })
+
+    assert len(deako.get_devices()) == 3
+
+
+@pytest.mark.parametrize(
+    ("dim", "stored"),
+    [(50.0, 50), (49.6, 50), (0, 0), (101, None), (-1, None), ("5", None),
+     (True, None), (float("nan"), None)],
+)
+def test_incoming_json_device_found_dim(dim, stored):
+    """Test dim is read as an int from 0 to 100; anything else is ignored."""
+    deako = Deako(Mock())
+
+    deako.incoming_json({
+        "type": "DEVICE_FOUND",
+        "data": {"name": "Lamp", "uuid": "u", "capabilities": "power+dim",
+                 "state": {"power": True, "dim": dim}},
+    })
+
+    assert deako.get_state("u") == {"power": True, "dim": stored}
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        ({"power": True, "dim": 50.0}, {"power": True, "dim": 50}),
+        ({"power": 1, "dim": 60}, {"power": True, "dim": 60}),
+        ({"power": 0}, {"power": False, "dim": 40}),
+        # an invalid dim doesn't lose the power change
+        ({"power": True, "dim": 101}, {"power": True, "dim": 40}),
+        ({"power": True, "dim": "5"}, {"power": True, "dim": 40}),
+    ],
+)
+def test_incoming_json_event_lenient_values(state, expected):
+    """Test events with values Home Assistant or older firmware send."""
+    deako = Deako(Mock())
+    deako.record_device("Lamp", "u", True, False, 40)
+
+    deako.incoming_json(
+        {"type": "EVENT", "data": {"target": "u", "state": state}},
+    )
+
+    assert deako.get_state("u") == expected
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # handler raises: data isn't an object
+        {"type": "EVENT", "data": None, "junk": "x" * 10_000},
+        # invalid device with a huge, multi-line uuid
+        {"type": "DEVICE_FOUND",
+         "data": {"name": 1, "uuid": "u\r\n" * 5_000,
+                  "state": {"power": True}}},
+        # invalid event target
+        {"type": "EVENT",
+         "data": {"target": ["t"] * 5_000, "state": {"power": "on"}}},
+    ],
+)
+def test_incoming_json_logs_are_bounded(message, caplog):
+    """Test logging an invalid message stays short and on one line."""
+    deako = Deako(Mock())
+
+    deako.incoming_json(message)
+
+    assert caplog.records
+    for record in caplog.records:
+        text = record.getMessage()
+        assert len(text) < 300
+        assert "\n" not in text and "\r" not in text

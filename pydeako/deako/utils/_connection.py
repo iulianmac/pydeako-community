@@ -3,8 +3,10 @@ Class that manages a socket connection to a deako device.
 """
 
 import asyncio
+import codecs
 import json
 import logging
+import re
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
@@ -15,6 +17,13 @@ _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 # Messages to and from the device are single-line JSON separated by CRLF.
 MESSAGE_DELIMITER = "\r\n"
+# Longest incomplete message kept while waiting for the rest of it. It's
+# checked after each read, so one read more can pass.
+MAX_MESSAGE_LENGTH = 64 * 1024
+_JSON_WHITESPACE = " \t\r\n"
+_JSON_DECODER = json.JSONDecoder()
+# A line that starts a new message, after optional whitespace.
+_NEXT_MESSAGE = re.compile(r"\n[ \t\r]*\{")
 
 
 class UnknownStateException(Exception):
@@ -60,6 +69,11 @@ class _Connection:
         self.state = ConnectionState.NOT_STARTED
         self.on_data_callback = on_data_callback
         self.message_buffer = ""
+        # Keeps a multi-byte character that is split between reads.
+        self.utf8_decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self.skipping_line = False
+        # Bad input is logged as a warning once, then at debug.
+        self.bad_input_logged = False
         self.socket = _SocketConnection(address, self.loop)
         self.tasks = set()
         self.init_run()
@@ -84,28 +98,73 @@ class _Connection:
             self.state = ConnectionState.ERROR
             return
 
+        if not data:
+            # An empty read means the device closed the connection. Reading
+            # again would return at once and spin without yielding.
+            _LOGGER.warning("%s closed the connection", self.format_name())
+            self.state = ConnectionState.ERROR
+            return
+
         self.parse_data(data)
 
     def parse_data(self, data: bytes) -> None:
         """
-        Parse incoming bytes into json as expected. Possible to have
-        data come in multiple chunks and multiple messages.
+        Parse incoming bytes into JSON messages.
+
+        A message can arrive over several reads, and a read can hold several
+        messages. Input that isn't a JSON object is skipped up to the next
+        line that starts one, so a bad message doesn't block later ones.
         """
-        raw_string = data.decode("utf-8")
+        text = self.utf8_decoder.decode(data)
         _LOGGER.debug(
-            "[%s] Raw message received: %s",
-            self.format_name(),
-            raw_string,
+            "[%s] Raw message received: %r", self.format_name(), text,
         )
-        messages = raw_string.strip().split(MESSAGE_DELIMITER)
-        for message_str in messages:
-            self.message_buffer = self.message_buffer + message_str
+        if self.skipping_line:
+            line_end = text.find("\n")
+            if line_end == -1:
+                return
+            text = text[line_end + 1:]
+            self.skipping_line = False
+
+        buffer = self.message_buffer + text
+        while buffer := buffer.lstrip(_JSON_WHITESPACE):
             try:
-                message_json = json.loads(self.message_buffer)
-                self.on_data_callback(message_json)
-                self.message_buffer = ""
-            except json.decoder.JSONDecodeError:
-                _LOGGER.debug("Got partial message: %s", self.message_buffer)
+                message, end = _JSON_DECODER.raw_decode(buffer)
+            except (ValueError, RecursionError):
+                next_message = _NEXT_MESSAGE.search(buffer)
+                if next_message is None:
+                    break  # incomplete, wait for more data
+                self._log_bad_input(
+                    "Skipping invalid message from %s", self.format_name(),
+                )
+                buffer = buffer[next_message.start() + 1:]
+                continue
+            buffer = buffer[end:]
+            if isinstance(message, dict):
+                self.on_data_callback(message)
+            else:
+                self._log_bad_input(
+                    "Skipping non-object message from %s", self.format_name(),
+                )
+
+        if len(buffer) > MAX_MESSAGE_LENGTH:
+            self._log_bad_input(
+                "Dropping a message over %d characters from %s",
+                MAX_MESSAGE_LENGTH,
+                self.format_name(),
+            )
+            # Keep what follows the last complete line, unless that part is
+            # itself too long; then skip until the current line ends.
+            rest = buffer[buffer.rfind("\n") + 1:]
+            self.skipping_line = len(rest) > MAX_MESSAGE_LENGTH
+            buffer = "" if self.skipping_line else rest
+        self.message_buffer = buffer
+
+    def _log_bad_input(self, message: str, *args: object) -> None:
+        """Log bad input as a warning the first time, then at debug."""
+        level = logging.DEBUG if self.bad_input_logged else logging.WARNING
+        self.bad_input_logged = True
+        _LOGGER.log(level, message, *args)
 
     def init_run(self) -> None:
         """Init the run sequence and store run task."""
@@ -153,6 +212,9 @@ class _Connection:
             elif self.state == ConnectionState.CONNECTED:
                 try:
                     await self.read_socket()
+                    # A read returns without suspending while data is
+                    # waiting, so let other tasks run between reads.
+                    await asyncio.sleep(0)
                 # pylint: disable-next=broad-exception-caught
                 except Exception as exc:
                     _LOGGER.error(

@@ -1,6 +1,8 @@
 """Tests _Connection."""
 
+import asyncio
 import json
+import logging
 from uuid import uuid4
 from unittest.mock import AsyncMock, call, Mock, patch
 import pytest
@@ -111,6 +113,26 @@ async def test_read_socket(
 @patch(
     "pydeako.deako.utils._connection._SocketConnection", spec=_SocketConnection
 )
+@patch("pydeako.deako.utils._connection._Connection.parse_data")
+@pytest.mark.asyncio
+async def test_read_socket_closed_by_device(
+    parse_data_mock, socket_connection_mock, asyncio_mock
+):
+    """Test _Connection.read_socket, device closed the connection (EOF)."""
+    asyncio_mock.get_running_loop.return_value = Mock()
+    conn = _Connection(Mock(), Mock(), Mock())
+    socket_connection_mock.return_value.read_bytes.return_value = b""
+
+    await conn.read_socket()
+
+    parse_data_mock.assert_not_called()
+    assert conn.state == ConnectionState.ERROR
+
+
+@patch("pydeako.deako.utils._connection.asyncio")
+@patch(
+    "pydeako.deako.utils._connection._SocketConnection", spec=_SocketConnection
+)
 def test_parse_data_one_item(socket_connection_mock, asyncio_mock):
     """Test _Connection.parse_data, one message."""
     json_message = {"key": "value"}
@@ -195,6 +217,104 @@ def test_parse_data_partial(socket_connection_mock, asyncio_mock):
             call(json_message),
         ]
     )
+
+
+def _parsed(*chunks: bytes) -> list[object]:
+    """Feed chunks to a _Connection's parser and return what it delivered."""
+    delivered: list[object] = []
+    with patch("pydeako.deako.utils._connection.asyncio"), patch(
+        "pydeako.deako.utils._connection._SocketConnection",
+        spec=_SocketConnection,
+    ):
+        conn = _Connection("127.0.0.1:23", "dev", delivered.append)
+    for chunk in chunks:
+        conn.parse_data(chunk)
+    return delivered
+
+
+def test_parse_data_utf8_split_across_reads():
+    """Test a multi-byte character split between two reads."""
+    message = json.dumps({"name": "Café"}, ensure_ascii=False).encode()
+    cut = message.index("é".encode()) + 1
+
+    assert _parsed(message[:cut], message[cut:] + b"\r\n") == [
+        {"name": "Café"},
+    ]
+
+
+def test_parse_data_skips_invalid_line():
+    """Test a line that isn't JSON doesn't block later messages."""
+    assert _parsed(b"not json\r\n", b'{"a": 1}\r\n', b'{"b": 2}\r\n') == [
+        {"a": 1}, {"b": 2},
+    ]
+
+
+def test_parse_data_skips_invalid_object_line():
+    """Test a broken object on its own line doesn't block later messages."""
+    assert _parsed(b'{"a": }\r\n{"b": 2}\r\n') == [{"b": 2}]
+
+
+def test_parse_data_resyncs_on_indented_message():
+    """Test recovery when the next message starts after whitespace."""
+    assert _parsed(b'{"a": }\r\n  {"b": 2}\r\n\t{"c": 3}\r\n') == [
+        {"b": 2}, {"c": 3},
+    ]
+
+
+def test_parse_data_skips_non_objects():
+    """Test JSON that isn't an object is not delivered."""
+    assert _parsed(b'[1, 2]\r\n"text"\r\n7\r\n{"a": 1}\r\n') == [{"a": 1}]
+
+
+def test_parse_data_skips_unparsable_values():
+    """Test a number too long to convert doesn't break the connection."""
+    huge_number = b'{"a": ' + b"9" * 5000 + b"}\r\n"
+
+    assert _parsed(huge_number, b'{"b": 2}\r\n') == [{"b": 2}]
+
+
+def test_parse_data_survives_deep_nesting():
+    """Test very deep nesting doesn't break the connection."""
+    deep = b'{"a": ' + b"[" * 100_000 + b"]" * 100_000 + b"}\r\n"
+
+    delivered = _parsed(deep, b'{"b": 2}\r\n')
+
+    # Whether Python can parse this depth depends on the platform's stack
+    # (it raises RecursionError on macOS, parses on Linux); either way the
+    # next message must still arrive.
+    assert delivered[-1] == {"b": 2}
+    assert len(delivered) in (1, 2)
+
+
+def test_parse_data_back_to_back_messages():
+    """Test two objects in one read without a delimiter between them."""
+    assert _parsed(b'{"a": 1}{"b": 2}\r\n') == [{"a": 1}, {"b": 2}]
+
+
+def test_parse_data_drops_oversized_message():
+    """Test an endless message is dropped instead of growing forever."""
+    endless = [b'{"a": "' + b"x" * 2040] * 64  # 128 KiB, never closed
+
+    assert _parsed(*endless, b'"}\r\n{"b": 2}\r\n') == [{"b": 2}]
+
+
+def test_parse_data_warns_once_about_bad_input(caplog):
+    """Test bad input is logged as a warning once, then at debug."""
+    bad_lines = b"7\n" * 50 + b"{\n" * 50
+    endless = [b'{"a": "' + b"x" * 2040] * 64  # 128 KiB, never closed
+
+    with caplog.at_level(logging.DEBUG, logger="pydeako"):
+        delivered = _parsed(bad_lines, *endless, b'"}\r\n{"b": 2}\r\n')
+
+    assert delivered == [{"b": 2}]
+    levels = [
+        record.levelno
+        for record in caplog.records
+        if record.getMessage().startswith(("Skipping", "Dropping"))
+    ]
+    assert len(levels) == 101  # 50 non-objects, 50 bad lines, 1 too long
+    assert levels[0] == logging.WARNING
+    assert levels.count(logging.WARNING) == 1
 
 
 @patch("pydeako.deako.utils._connection.asyncio")
@@ -313,6 +433,7 @@ async def test_state_machine_read_failure(
     address, name = Mock(), Mock()
     loop_mock = Mock()
     asyncio_mock.get_running_loop.return_value = loop_mock
+    asyncio_mock.sleep = AsyncMock()  # run() yields after each read
 
     conn = _Connection(address, name, Mock())
     conn.state = ConnectionState.CONNECTED
@@ -326,6 +447,37 @@ async def test_state_machine_read_failure(
     await conn.run()
 
     socket_connection_instance.close_socket.assert_called_once()
+
+
+@patch(
+    "pydeako.deako.utils._connection._SocketConnection", spec=_SocketConnection
+)
+@patch("pydeako.deako.utils._connection._Connection.init_run")
+@pytest.mark.asyncio
+async def test_state_machine_yields_between_reads(
+    _init_run_mock, socket_connection_mock
+):
+    """Test other tasks get a turn while the device keeps sending."""
+    reads = 5
+    # like sock_recv with data waiting, these reads return without suspending
+    socket_connection_mock.return_value.read_bytes.side_effect = (
+        [b'{"a": 1}\r\n'] * reads + [b""]
+    )
+    conn = _Connection("1.2.3.4:23", "dev", Mock())
+    conn.state = ConnectionState.CONNECTED
+    turns = 0
+
+    async def other_task() -> None:
+        nonlocal turns
+        while True:
+            turns += 1
+            await asyncio.sleep(0)
+
+    task = asyncio.create_task(other_task())
+    await conn.run()
+    task.cancel()
+
+    assert turns >= reads
 
 
 @patch("pydeako.deako.utils._connection.asyncio")

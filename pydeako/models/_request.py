@@ -44,7 +44,9 @@ def state_change_request(
         "power": power,
     }
     if dim is not None:
-        state["dim"] = dim
+        # The local API expects an integer level; Home Assistant passes a
+        # whole float such as 50.0.
+        state["dim"] = round(dim)
     return {
         **__base_request(**kwargs),
         "type": _const.RequestType.CONTROL,

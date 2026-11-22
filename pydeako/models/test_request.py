@@ -1,6 +1,7 @@
 """
 Tests our functions to ensure the correct objects are generated.
 """
+from typing import Any
 from uuid import uuid4
 import pytest
 
@@ -126,3 +127,13 @@ def test_state_change_request_with_params():
             },
         },
     }
+
+
+def test_state_change_request_sends_dim_as_int():
+    """Test a float dim, as Home Assistant passes it, is sent as an int."""
+    dim: Any = 50.0
+    request = state_change_request("uuid", True, dim)
+
+    sent = request["data"]["state"]["dim"]
+    assert sent == 50
+    assert isinstance(sent, int)

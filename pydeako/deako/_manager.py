@@ -26,6 +26,8 @@ _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 CONNECTED_POLLING_INTERVAL_S = 1
 CONNECTION_TIMEOUT_S = 10
+# Wait before trying again after connecting failed unexpectedly.
+CONNECTION_RETRY_DELAY_S = 10
 WORKER_WAIT_S = 0.5
 PING_WORKER_WAIT_S = 10
 # Max time to wait for the device to answer a request before sending the next.
@@ -41,7 +43,8 @@ def _is_device_busy(response: dict[str, Any] | None) -> bool:
         return False
     if response.get("status") != ResponseStatus.ERROR:
         return False
-    return (response.get("data") or {}).get("code") == ErrorCode.DEVICE_BUSY
+    data = response.get("data")
+    return isinstance(data, dict) and data.get("code") == ErrorCode.DEVICE_BUSY
 
 
 @dataclass
@@ -89,20 +92,33 @@ class _Manager:
             return
         self.state.connecting = True
         try:
+            await self._connect()
+        finally:
+            self.state.connecting = False
+
+    async def _connect(self) -> None:
+        """Connect to a discovered device; retry later if that fails."""
+        try:
             address, name = await self.get_address()
         except DevicesNotFoundException:
             _LOGGER.warning("No devices to connect to")
             self.create_connection_task()
-            self.state.connecting = False
             return
         connection = _Connection(address, name, self.incoming_json)
         timeout = 0
-        while not connection.is_connected() and timeout < CONNECTION_TIMEOUT_S:
-            await asyncio.sleep(CONNECTED_POLLING_INTERVAL_S)
-            timeout += CONNECTED_POLLING_INTERVAL_S
-        if timeout == CONNECTION_TIMEOUT_S:
+        try:
+            while (
+                not connection.is_connected()
+                and timeout < CONNECTION_TIMEOUT_S
+            ):
+                await asyncio.sleep(CONNECTED_POLLING_INTERVAL_S)
+                timeout += CONNECTED_POLLING_INTERVAL_S
+        except BaseException:
+            # e.g. cancelled by close(): don't leave the socket open
+            connection.close()
+            raise
+        if not connection.is_connected():
             _LOGGER.error("Timeout attempting to connect. Trying again")
-            self.state.connecting = False
             connection.close()
             self.create_connection_task()
             return
@@ -113,7 +129,6 @@ class _Manager:
             self.maintain_worker = asyncio.create_task(
                 self.maintain_connection_worker()
             )
-        self.state.connecting = False
 
     def close(self) -> None:
         """Close connection."""
@@ -141,7 +156,7 @@ class _Manager:
         # pylint: disable-next=line-too-long
         # noqa keep reference via: https://stackoverflow.com/questions/71938799/python-asyncio-create-task-really-need-to-keep-a-reference
         # even if we don't care
-        task = asyncio.create_task(self.init_connection())
+        task = asyncio.create_task(self._connect_in_background())
         self.tasks.add(task)
 
         def remove_task(_task: asyncio.Task[None]) -> None:
@@ -152,30 +167,56 @@ class _Manager:
 
         task.add_done_callback(remove_task)
 
+    async def _connect_in_background(self) -> None:
+        """Connect from a task; try again later if that fails unexpectedly."""
+        try:
+            await self.init_connection()
+        # An unexpected error must not end the reconnect attempts for good.
+        except Exception:  # pylint: disable=broad-exception-caught
+            _LOGGER.exception(
+                "Connecting failed, trying again in %s s",
+                CONNECTION_RETRY_DELAY_S,
+            )
+            if self.state.canceled:
+                return
+            await asyncio.sleep(CONNECTION_RETRY_DELAY_S)
+            self.create_connection_task()
+
     async def maintain_connection_worker(self) -> None:
         """Monitor connection and restart if there's a failure."""
         await asyncio.sleep(PING_WORKER_WAIT_S)
-        while True:
-            if self.state.canceled:
-                break
+        while not self.state.canceled:
             self.pong_received = False
             _LOGGER.debug("Pinging for responsiveness")
-            await self.send_request(
-                _Request(device_ping_request(source=self.client_name)),
-            )
-            await asyncio.sleep(PING_WORKER_WAIT_S)
+            try:
+                await self.send_request(
+                    _Request(device_ping_request(source=self.client_name)),
+                )
+                await asyncio.sleep(PING_WORKER_WAIT_S)
+            # An unexpected error must not stop the liveness check for good;
+            # treat it like a missing pong and reconnect.
+            except Exception:  # pylint: disable=broad-exception-caught
+                _LOGGER.exception("Pinging the device failed")
+                self.pong_received = False
             if self.pong_received:
                 _LOGGER.debug("Pong received")
             else:
                 _LOGGER.warning("Never received pong! Dumping this connection")
                 self.close()
+                # close() marks the manager canceled, but this is a
+                # reconnect: a failed attempt must still be retried.
+                self.state.canceled = False
                 self.create_connection_task()
                 break
 
     def incoming_json(self, incoming_json: dict[str, Any]) -> None:
         """Handle incoming json."""
-        transaction_id = incoming_json.get("transactionId", "")
-        pending = self.pending_responses.get(transaction_id)
+        transaction_id = incoming_json.get("transactionId")
+        pending = (
+            self.pending_responses.get(transaction_id)
+            if isinstance(transaction_id, str)
+            else None
+        )
         if pending is not None and not pending.done():
             pending.set_result(incoming_json)
         response_type = incoming_json.get("type")

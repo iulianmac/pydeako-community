@@ -9,7 +9,7 @@ import socket
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
-from ._address_pool import _AddressPool
+from ._address_pool import _AddressPool, EmptyAddressPool
 
 DEAKO_TYPE = "_deako._tcp.local."
 TIMEOUT_S = 10
@@ -44,8 +44,8 @@ class DeakoDiscoverer(ServiceBrowser):
             self.zeroconf,
             DEAKO_TYPE,
             DeakoListener(
-                self.address_pool.add_address,
-                self.address_pool.remove_address,
+                self.address_pool.set_service,
+                self.address_pool.remove_service,
             ),
         )
 
@@ -61,9 +61,10 @@ class DeakoDiscoverer(ServiceBrowser):
         ):
             total_time += POLLING_INTERVAL_S
             await sleep(POLLING_INTERVAL_S)
-        if self.address_pool.available_addresses() == 0:
-            raise DevicesNotFoundException()
-        address, name = self.address_pool.get_address()
+        try:
+            address, name = self.address_pool.get_address()
+        except EmptyAddressPool as exc:
+            raise DevicesNotFoundException() from exc
         _LOGGER.debug("Got address %s, with device name %s", address, name)
         return address, name
 
@@ -77,19 +78,19 @@ class DeakoListener(ServiceListener):
 
     def __init__(
         self,
-        device_address_callback: Callable[[str, str], None],
-        device_address_removed_callback: Callable[[str], None],
+        device_addresses_callback: Callable[[str, list[str]], None],
+        device_removed_callback: Callable[[str], None],
     ) -> None:
-        """Save callbacks."""
-        self.device_address_callback = device_address_callback
-        self.device_address_removed_callback = device_address_removed_callback
+        """Save callbacks: a service's addresses set, and a service removed."""
+        self.device_addresses_callback = device_addresses_callback
+        self.device_removed_callback = device_removed_callback
 
     def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
         """Add services associated with service."""
         _LOGGER.debug("Add service with address type %s, name %s", type_, name)
         addresses = self.__get_addresses(zc, type_, name)
-        for address in addresses:
-            self.device_address_callback(address, name)
+        if addresses:
+            self.device_addresses_callback(name, addresses)
 
     def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
         """Remove addresses associated with service."""
@@ -98,9 +99,9 @@ class DeakoListener(ServiceListener):
             type_,
             name,
         )
-        addresses = self.__get_addresses(zc, type_, name)
-        for address in addresses:
-            self.device_address_removed_callback(address)
+        # The service can't be resolved any more after a goodbye packet or
+        # expiry, so remove it by name.
+        self.device_removed_callback(name)
 
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
         """Update service."""
@@ -110,8 +111,9 @@ class DeakoListener(ServiceListener):
             name,
         )
         addresses = self.__get_addresses(zc, type_, name)
-        for address in addresses:
-            self.device_address_callback(address, name)
+        if addresses:
+            # The device may have a new address, e.g. after a DHCP change.
+            self.device_addresses_callback(name, addresses)
 
     def __get_addresses(
         self, zeroconf: Zeroconf, address_type: str, name: str
